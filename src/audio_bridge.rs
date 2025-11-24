@@ -1,7 +1,7 @@
+use crate::config::Config;
+use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
-use std::sync::Arc;
-use crate::config::Config;
 
 pub enum AudioEvent {
     AudioData(Vec<u8>),
@@ -17,7 +17,7 @@ impl AudioBridge {
     pub async fn new(config: &Config, tx: mpsc::Sender<AudioEvent>) -> anyhow::Result<Self> {
         let socket = UdpSocket::bind(format!("0.0.0.0:{}", config.audio_port_up)).await?;
         let target_addr = format!("127.0.0.1:{}", config.audio_port_down);
-        
+
         Ok(Self {
             socket: Arc::new(socket),
             target_addr,

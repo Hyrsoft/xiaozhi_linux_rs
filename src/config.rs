@@ -19,7 +19,7 @@ impl Default for Config {
             ui_port_up: 5678,
             ui_port_down: 5679,
             // Default values, should be overridden by config file or env vars
-            ws_url: "wss://api.xiaozhi.me/v1/ws".to_string(), 
+            ws_url: "wss://api.xiaozhi.me/v1/ws".to_string(),
             ws_token: "test-token".to_string(),
             device_id: "unknown-device".to_string(),
         }

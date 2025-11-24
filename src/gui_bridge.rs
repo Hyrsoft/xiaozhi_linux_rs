@@ -1,7 +1,7 @@
+use crate::config::Config;
+use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
-use std::sync::Arc;
-use crate::config::Config;
 
 pub enum GuiEvent {
     Message(String),
@@ -17,7 +17,7 @@ impl GuiBridge {
     pub async fn new(config: &Config, tx: mpsc::Sender<GuiEvent>) -> anyhow::Result<Self> {
         let socket = UdpSocket::bind(format!("0.0.0.0:{}", config.ui_port_up)).await?;
         let target_addr = format!("127.0.0.1:{}", config.ui_port_down);
-        
+
         Ok(Self {
             socket: Arc::new(socket),
             target_addr,
@@ -26,7 +26,7 @@ impl GuiBridge {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        let mut buf = [0u8; 4096]; 
+        let mut buf = [0u8; 4096];
         loop {
             let (len, _) = self.socket.recv_from(&mut buf).await?;
             if len > 0 {
@@ -42,7 +42,9 @@ impl GuiBridge {
     }
 
     pub async fn send_message(&self, msg: &str) -> anyhow::Result<()> {
-        self.socket.send_to(msg.as_bytes(), &self.target_addr).await?;
+        self.socket
+            .send_to(msg.as_bytes(), &self.target_addr)
+            .await?;
         Ok(())
     }
 }
