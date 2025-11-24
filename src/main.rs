@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
     // 加载配置
     let mut config = Config::new().unwrap_or_default();
 
-    // Ensure device_id and client_id are set
+    // 设备id和客户端id的处理
     if config.device_id == "unknown-device" {
         config.device_id = match get_mac_address() {
             Ok(Some(mac)) => mac.to_string(),
@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // --- 关键修改：在启动 NetLink 前检查激活 ---
+    // 在启动 NetLink 前检查激活
     loop {
         match activation::check_device_activation(&config).await {
             activation::ActivationResult::Activated => {
@@ -84,15 +84,15 @@ async fn main() -> anyhow::Result<()> {
             activation::ActivationResult::NeedActivation(code) => {
                 println!("Device NOT activated. Code: {}", code);
                 
-                // 1. GUI 显示验证码
+                // GUI 显示验证码
                 let gui_msg = format!(r#"{{"type":"activation", "code":"{}"}}"#, code);
                 let _ = gui_bridge.send_message(&gui_msg).await;
                 
-                // 2. TTS 播报 (这里你需要 sound_app 支持 TTS 指令，或者 Core 自己调用 TTS 引擎)
+                // TTS 播报 
                 // 简单做法：假设 sound_app 能播报数字
                 // audio_bridge.speak_text(format!("请在手机输入验证码 {}", code)).await;
                 
-                // 3. 等待几秒再轮询
+                // 等待几秒再轮询
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
             activation::ActivationResult::Error(e) => {

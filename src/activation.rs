@@ -28,17 +28,16 @@ pub enum ActivationResult {
 }
 
 pub async fn check_device_activation(config: &Config) -> ActivationResult {
-    // 1. 构造 HTTP URL
-    // C++ uses: https://api.tenclass.net/xiaozhi/ota/
-    // We can derive it or hardcode it. Since ws_url is wss://api.tenclass.net/xiaozhi/v1/,
-    // we can replace /v1/ with /ota/ and wss with https.
+    // 构造 HTTP URL
+    // 百问网的程序中，用 https://api.tenclass.net/xiaozhi/ota/
+    // 现在这里硬编码，后面改为从配置文件读取
     let http_url = config.ws_url.replace("wss://", "https://").replace("/v1/", "/ota/");
     
     let client = Client::new();
 
     println!("Checking activation status via HTTP: {}", http_url);
 
-    // Construct the body as per C++ code
+    // 构造请求体
     let body = json!({
         "uuid": config.client_id,
         "application": {
@@ -52,11 +51,11 @@ pub async fn check_device_activation(config: &Config) -> ActivationResult {
         }
     });
 
-    // 2. 构造请求
+    // 构造请求
     let response = client.post(&http_url)
         .header("Authorization", format!("Bearer {}", config.ws_token))
         .header("Device-Id", &config.device_id)
-        .header("Protocol-Version", "1")
+        .header("Protocol-Version", "2")
         .header("Content-Type", "application/json")
         .header("User-Agent", "weidongshan1")
         .header("Accept-Language", "zh-CN")
@@ -67,7 +66,7 @@ pub async fn check_device_activation(config: &Config) -> ActivationResult {
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                // 3. 解析 JSON
+                // 解析 JSON
                 match resp.json::<serde_json::Value>().await {
                     Ok(json) => {
                         // 检查是否有 "activation" 字段

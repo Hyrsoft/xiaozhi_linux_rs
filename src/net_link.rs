@@ -37,7 +37,7 @@ struct HelloMessage {
     version: u8,
     transport: String,
     audio_params: AudioParams,
-    device_id: String,
+    // device_id: String, // Removed to match C++ implementation
 }
 
 pub struct NetLink {
@@ -87,7 +87,7 @@ impl NetLink {
 
         // 根据配置构建WebSocket请求
         let url = Url::parse(&self.config.ws_url)?;
-        let host = url.host_str().unwrap_or("api.xiaozhi.me");
+        let host = url.host_str().unwrap_or("api.tenclass.net");
 
         let request = tokio_tungstenite::tungstenite::http::Request::builder()
             .method("GET")
@@ -122,9 +122,10 @@ impl NetLink {
                 channels: 1,
                 frame_duration: 60,
             },
-            device_id: device_id.clone(),
+            // device_id: device_id.clone(),
         };
         let hello_json = serde_json::to_string(&hello)?;
+        println!("Sending Hello: {}", hello_json);
         write.send(Message::Text(hello_json.into())).await?;
 
         loop {
@@ -134,12 +135,14 @@ impl NetLink {
                         Some(Ok(msg)) => {
                             match msg {
                                 Message::Text(text) => {
+                                    // println!("Received Text: {}", text); // Debug log
                                     self.tx.send(NetEvent::Text(text.to_string())).await?;
                                 }
                                 Message::Binary(data) => {
                                     self.tx.send(NetEvent::Binary(data.to_vec())).await?;
                                 }
-                                Message::Close(_) => {
+                                Message::Close(frame) => {
+                                    println!("Server closed connection: {:?}", frame);
                                     return Err(anyhow::anyhow!("Connection closed"));
                                 }
                                 _ => {}
