@@ -1,0 +1,7 @@
+[application]
+name = "xiaozhi"
+version = "1.0.0"
+
+[board]
+type = "xiaozhi"
+name = "小智"

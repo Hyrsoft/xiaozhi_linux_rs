@@ -40,13 +40,13 @@ pub async fn check_device_activation(config: &Config) -> ActivationResult {
     let body = json!({
         "uuid": config.client_id,
         "application": {
-            "name": "xiaozhi_linux_100ask", 
-            "version": "1.0.0"
+            "name": env!("APP_NAME"), 
+            "version": env!("APP_VERSION")
         },
         "ota": {},
         "board": {
-            "type": "100ask_linux_board", 
-            "name": "100ask_imx6ull_board" 
+            "type": env!("BOARD_TYPE"), 
+            "name": env!("BOARD_NAME") 
         }
     });
 
