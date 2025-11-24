@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     // 加载配置
-    let config = Config::default(); // TODO: 从文件加载
+    let config = Config::new().unwrap_or_default();
 
     // 创建通道，用于组件间通信
 
@@ -134,6 +134,8 @@ async fn main() -> anyhow::Result<()> {
                         current_state = SystemState::NetworkError;
                         // Notify GUI: kDeviceStateConnecting = 4 (or Error = 9)
                         let _ = gui_bridge.send_message(r#"{"state": 4}"#).await;
+                        
+                        // TODO: Clear audio buffer if any
                     }
                 }
             }
@@ -143,15 +145,17 @@ async fn main() -> anyhow::Result<()> {
                 match event {
                     AudioEvent::AudioData(data) => {
                         // println!("Received Audio from Mic: {} bytes", data.len());
-                        if current_state != SystemState::Speaking {
-                             if current_state != SystemState::Listening {
-                                 current_state = SystemState::Listening;
-                                 // Notify GUI: kDeviceStateListening = 5
-                                 let _ = gui_bridge.send_message(r#"{"state": 5}"#).await;
-                             }
-                             // Forward to Server
-                             let _ = tx_net_cmd.send(NetCommand::SendBinary(data)).await;
+                        
+                        // Always forward audio to server to support barge-in (interruption)
+                        // The server VAD will decide if user is speaking and send stop command
+                        
+                        if current_state != SystemState::Listening {
+                             current_state = SystemState::Listening;
+                             // Notify GUI: kDeviceStateListening = 5
+                             let _ = gui_bridge.send_message(r#"{"state": 5}"#).await;
                         }
+                        // Forward to Server
+                        let _ = tx_net_cmd.send(NetCommand::SendBinary(data)).await;
                     }
                     AudioEvent::Command(cmd) => {
                         println!("Received Command from AudioBridge: {:?}", cmd);

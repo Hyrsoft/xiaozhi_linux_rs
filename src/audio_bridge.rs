@@ -42,18 +42,6 @@ impl AudioBridge {
             if len > 0 {
                 let data = &buf[..len];
                 
-                // Optimization: Try to parse as JSON only if it looks like JSON (starts with '{')
-                // This avoids expensive parsing for every audio frame
-                if data[0] == b'{' {
-                    if let Ok(msg) = serde_json::from_slice::<AudioMessage>(data) {
-                        if let Err(e) = self.tx.send(AudioEvent::Command(msg)).await {
-                            eprintln!("Failed to send audio command: {}", e);
-                            break;
-                        }
-                        continue;
-                    }
-                }
-
                 // Treat as audio data
                 // Filter out very small packets which might be noise or keep-alives
                 if len > 10 {
