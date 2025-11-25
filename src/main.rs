@@ -25,7 +25,7 @@ struct ServerMessage {
     #[serde(rename = "type")]
     msg_type: String,
     command: Option<String>, // 用于IOT类型
-    text: Option<String>, // 用于TTS文本
+    text: Option<String>, // 用于TTS/STT文本
     state: Option<String>, // 用于TTS状态 (start/stop)
     session_id: Option<String>, // 会话ID
 }
@@ -182,11 +182,19 @@ async fn main() -> anyhow::Result<()> {
                             if let Some(sid) = msg.session_id {
                                 if current_session_id.as_deref() != Some(&sid) {
                                     println!("New Session ID: {}", sid);
-                                    current_session_id = Some(sid);
+                                    current_session_id = Some(sid.clone());
                                 }
                             }
 
                             match msg.msg_type.as_str() {
+                                "hello" => {
+                                    // 【关键握手步骤】收到服务端的 Hello 响应后，发送"开启聆听"指令
+                                    println!("Server Hello received. Starting listen mode...");
+                                    let listen_cmd = r#"{"session_id":"","type":"listen","state":"start","mode":"auto"}"#;
+                                    if let Err(e) = tx_net_cmd.send(NetCommand::SendText(listen_cmd.to_string())).await {
+                                        eprintln!("Failed to send listen command: {}", e);
+                                    }
+                                }
                                 "iot" => {
                                     // Log the command if present
                                     if let Some(cmd) = &msg.command {
@@ -214,7 +222,15 @@ async fn main() -> anyhow::Result<()> {
                                         println!("TTS: {}", t);
                                     }
                                 }
-                                _ => {}
+                                "stt" => {
+                                    // 处理 STT (语音转文字) 结果
+                                    if let Some(text_content) = msg.text {
+                                        println!("STT Result: {}", text_content);
+                                    }
+                                }
+                                _ => {
+                                    println!("Unhandled message type: {}", msg.msg_type);
+                                }
                             }
                         }
 
@@ -273,7 +289,7 @@ async fn main() -> anyhow::Result<()> {
                 match event {
                     AudioEvent::AudioData(data) => {
                         // 打印收到的音频数据长度
-                        println!("Received Audio from Mic: {} bytes", data.len());
+                        // println!("Received Audio from Mic: {} bytes", data.len());
                         
                         // 检查是否需要静音（AEC策略）
                         if should_mute_mic {
@@ -289,7 +305,7 @@ async fn main() -> anyhow::Result<()> {
                                 eprintln!("Failed to send to GUI: {}", e);
                              }
                         }
-                        println!("Forwarding Audio to Server: {} bytes", data.len());
+                        // println!("Forwarding Audio to Server: {} bytes", data.len());
                         // 把音频数据转发给服务器
                         if let Err(e) = tx_net_cmd.send(NetCommand::SendBinary(data)).await {
                             eprintln!("Failed to send audio to NetLink: {}", e);
