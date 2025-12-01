@@ -1,32 +1,32 @@
+mod activation;
 mod audio_bridge;
 mod config;
 mod gui_bridge;
 mod iot_bridge;
 mod net_link;
 mod state_machine;
-mod activation;
 
 use audio_bridge::{AudioBridge, AudioEvent};
 use config::Config;
 use gui_bridge::{GuiBridge, GuiEvent};
 use iot_bridge::{IotBridge, IotEvent};
+use mac_address::get_mac_address;
 use net_link::{NetCommand, NetEvent, NetLink};
+use serde::Deserialize;
 use state_machine::SystemState;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use serde::Deserialize;
-use mac_address::get_mac_address;
-use uuid::Uuid;
 use tokio::signal;
+use tokio::sync::mpsc;
+use uuid::Uuid;
 
 // 服务器消息结构体
 #[derive(Deserialize)]
 struct ServerMessage {
     #[serde(rename = "type")]
     msg_type: String,
-    command: Option<String>, // 用于IOT类型
-    text: Option<String>, // 用于TTS/STT文本
-    state: Option<String>, // 用于TTS状态 (start/stop)
+    command: Option<String>,    // 用于IOT类型
+    text: Option<String>,       // 用于TTS/STT文本
+    state: Option<String>,      // 用于TTS状态 (start/stop)
     session_id: Option<String>, // 会话ID
 }
 
@@ -35,38 +35,28 @@ async fn main() -> anyhow::Result<()> {
     // 初始化日志
     env_logger::init();
 
-    // 加载配置
-    let mut config = Config::new().unwrap_or_default();
+    // 加载配置（若不存在则根据编译时默认生成并持久化）
+    let mut config = Config::load_or_create()?;
 
     // 设备id和客户端id的处理
+    let mut config_dirty = false;
     if config.device_id == "unknown-device" {
         config.device_id = match get_mac_address() {
             Ok(Some(mac)) => mac.to_string().to_lowercase(),
             _ => Uuid::new_v4().to_string(),
         };
-    }
-    
-    // 设备端UUID，先从本地文件读取以保持重启间身份一致，如果不存在则生成新的并保存
-    let uuid_file_path = "xiaozhi_uuid.txt";
-    if config.client_id == "unknown-client" {
-        if let Ok(content) = std::fs::read_to_string(uuid_file_path) {
-            let trimmed = content.trim();
-            if !trimmed.is_empty() {
-                config.client_id = trimmed.to_string();
-                println!("Loaded Client ID from file: {}", config.client_id);
-            }
-        }
+        config_dirty = true;
     }
 
-    // 生成新的UUID并保存
     if config.client_id == "unknown-client" {
         config.client_id = Uuid::new_v4().to_string();
         println!("Generated new Client ID: {}", config.client_id);
-        // Save to file
-        if let Err(e) = std::fs::write(uuid_file_path, &config.client_id) {
-            eprintln!("Failed to save Client ID to file: {}", e);
-        } else {
-            println!("Saved Client ID to {}", uuid_file_path);
+        config_dirty = true;
+    }
+
+    if config_dirty {
+        if let Err(e) = config.save() {
+            eprintln!("Failed to persist updated config: {}", e);
         }
     }
 
@@ -110,24 +100,27 @@ async fn main() -> anyhow::Result<()> {
         match activation::check_device_activation(&config).await {
             activation::ActivationResult::Activated => {
                 println!("Device is activated. Starting WebSocket...");
-                if let Err(e) = gui_bridge.send_message(r#"{"type":"toast", "text":"设备已激活"}"#).await {
+                if let Err(e) = gui_bridge
+                    .send_message(r#"{"type":"toast", "text":"设备已激活"}"#)
+                    .await
+                {
                     eprintln!("Failed to send GUI message: {}", e);
                 }
                 break; // 跳出循环，继续下面的 NetLink 启动
             }
             activation::ActivationResult::NeedActivation(code) => {
                 println!("Device NOT activated. Code: {}", code);
-                
+
                 // GUI 显示验证码
                 let gui_msg = format!(r#"{{"type":"activation", "code":"{}"}}"#, code);
                 if let Err(e) = gui_bridge.send_message(&gui_msg).await {
                     eprintln!("Failed to send GUI message: {}", e);
                 }
-                
-                // TTS 播报 
+
+                // TTS 播报
                 // 简单做法：假设 sound_app 能播报数字
                 // audio_bridge.speak_text(format!("请在手机输入验证码 {}", code)).await;
-                
+
                 // 等待几秒再轮询
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
@@ -175,7 +168,7 @@ async fn main() -> anyhow::Result<()> {
                     // 如果接收到服务器的文本消息，就转发给GUI
                     NetEvent::Text(text) => {
                         println!("Received Text from Server: {}", text);
-                        
+
                         // Try to parse as JSON to handle specific message types
                         if let Ok(msg) = serde_json::from_str::<ServerMessage>(&text) {
                             // 更新 Session ID
@@ -214,14 +207,14 @@ async fn main() -> anyhow::Result<()> {
                                         } else if state == "stop" {
                                             should_mute_mic = false;
                                             println!("TTS Stopped, unmuting mic");
-                                            
+
                                             // TTS 结束后，自动发送指令告诉服务器重新开始监听，实现连续对话
                                             let session_id = current_session_id.as_deref().unwrap_or("");
                                             let listen_cmd = format!(
                                                 r#"{{"session_id":"{}","type":"listen","state":"start","mode":"auto"}}"#,
                                                 session_id
                                             );
-                                            
+
                                             println!("Sending Auto-Listen Command after TTS");
                                             if let Err(e) = tx_net_cmd.send(NetCommand::SendText(listen_cmd)).await {
                                                 eprintln!("Failed to send loop listen command: {}", e);
@@ -246,9 +239,10 @@ async fn main() -> anyhow::Result<()> {
                             }
                         }
 
-                        if let Err(e) = gui_bridge.send_message(&text).await {
-                            eprintln!("Failed to send to GUI: {}", e);
-                        }
+                        // 先不转发给GUI
+                        // if let Err(e) = gui_bridge.send_message(&text).await {
+                        //     eprintln!("Failed to send to GUI: {}", e);
+                        // }
                     }
 
                     // 如果接收到服务器的二进制音频数据，就转发给音频桥播放
@@ -289,7 +283,7 @@ async fn main() -> anyhow::Result<()> {
                         if let Err(e) = iot_bridge.send_message(r#"{"type":"network", "state":"disconnected"}"#).await {
                             eprintln!("Failed to send to IoT: {}", e);
                         }
-                        
+
                         // 清理音频缓冲区（如果有的话）
                     }
                 }
@@ -301,7 +295,7 @@ async fn main() -> anyhow::Result<()> {
                     AudioEvent::AudioData(data) => {
                         // 打印收到的音频数据长度
                         // println!("Received Audio from Mic: {} bytes", data.len());
-                        
+
                         // 检查是否需要静音（AEC策略）
                         if should_mute_mic {
                             // 如果TTS正在播放，丢弃麦克风数据，防止回声
@@ -358,4 +352,3 @@ async fn main() -> anyhow::Result<()> {
     }
     Ok(())
 }
-

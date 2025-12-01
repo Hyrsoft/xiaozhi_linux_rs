@@ -18,7 +18,8 @@ pub struct GuiBridge {
 impl GuiBridge {
     pub async fn new(config: &Config, tx: mpsc::Sender<GuiEvent>) -> anyhow::Result<Self> {
         // 绑定本地UDP端口
-        let socket = UdpSocket::bind(format!("{}:{}", config.gui_local_ip, config.gui_local_port)).await?;
+        let socket =
+            UdpSocket::bind(format!("{}:{}", config.gui_local_ip, config.gui_local_port)).await?;
         let target_addr = format!("{}:{}", config.gui_remote_ip, config.gui_remote_port);
 
         Ok(Self {

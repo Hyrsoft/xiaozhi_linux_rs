@@ -89,12 +89,12 @@ impl NetLink {
         };
 
         // 根据配置构建WebSocket请求
-        let url = Url::parse(self.config.ws_url)?;
+        let url = Url::parse(self.config.ws_url.as_ref())?;
         let host = url.host_str().unwrap_or("api.tenclass.net");
 
         let request = tokio_tungstenite::tungstenite::http::Request::builder()
             .method("GET")
-            .uri(self.config.ws_url)
+            .uri(self.config.ws_url.as_ref())
             .header("Host", host)
             .header("Connection", "Upgrade")
             .header("Upgrade", "websocket")

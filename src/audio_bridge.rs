@@ -26,7 +26,11 @@ pub struct AudioBridge {
 
 impl AudioBridge {
     pub async fn new(config: &Config, tx: mpsc::Sender<AudioEvent>) -> anyhow::Result<Self> {
-        let socket = UdpSocket::bind(format!("{}:{}", config.audio_local_ip, config.audio_local_port)).await?;
+        let socket = UdpSocket::bind(format!(
+            "{}:{}",
+            config.audio_local_ip, config.audio_local_port
+        ))
+        .await?;
         let target_addr = format!("{}:{}", config.audio_remote_ip, config.audio_remote_port);
 
         Ok(Self {
@@ -43,7 +47,7 @@ impl AudioBridge {
             let (len, _) = self.socket.recv_from(&mut buf).await?;
             if len > 0 {
                 let data = &buf[..len];
-            
+
                 // 如果数据包长度大于10字节则认为是有效音频数据
                 if len > 10 {
                     if let Err(e) = self.tx.send(AudioEvent::AudioData(data.to_vec())).await {

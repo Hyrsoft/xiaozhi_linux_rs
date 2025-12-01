@@ -3,5 +3,5 @@
 .idea/
 
 
-# 忽略生成的uuid文件
-xiaozhi_uuid.txt
+# 忽略生成的config文件
+xiaozhi_config.json

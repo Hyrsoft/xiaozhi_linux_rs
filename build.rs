@@ -1,6 +1,6 @@
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
-use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Config {
@@ -70,7 +70,6 @@ struct HelloMessage {
     frame_duration: u32,
 }
 
-
 // 在编译时读取 config.toml 并设置环境变量
 fn main() {
     println!("cargo:rerun-if-changed=config.toml");
@@ -90,11 +89,20 @@ fn main() {
     println!("cargo:rustc-env=BOARD_NAME={}", config.board.name);
 
     // 音频配置
-    println!("cargo:rustc-env=AUDIO_LOCAL_PORT={}", config.audio.local_port);
-    println!("cargo:rustc-env=AUDIO_REMOTE_PORT={}", config.audio.remote_port);
+    println!(
+        "cargo:rustc-env=AUDIO_LOCAL_PORT={}",
+        config.audio.local_port
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_REMOTE_PORT={}",
+        config.audio.remote_port
+    );
     println!("cargo:rustc-env=AUDIO_LOCAL_IP={}", config.audio.local_ip);
     println!("cargo:rustc-env=AUDIO_REMOTE_IP={}", config.audio.remote_ip);
-    println!("cargo:rustc-env=AUDIO_BUFFER_SIZE={}", config.audio.buffer_size);
+    println!(
+        "cargo:rustc-env=AUDIO_BUFFER_SIZE={}",
+        config.audio.buffer_size
+    );
 
     // GUI 配置
     println!("cargo:rustc-env=GUI_LOCAL_PORT={}", config.gui.local_port);
@@ -118,9 +126,20 @@ fn main() {
     println!("cargo:rustc-env=CLIENT_ID={}", config.network.client_id);
 
     // Hello 消息配置
-    println!("cargo:rustc-env=HELLO_FORMAT={}", config.hello_message.format);
-    println!("cargo:rustc-env=HELLO_SAMPLE_RATE={}", config.hello_message.sample_rate);
-    println!("cargo:rustc-env=HELLO_CHANNELS={}", config.hello_message.channels);
-    println!("cargo:rustc-env=HELLO_FRAME_DURATION={}", config.hello_message.frame_duration);
+    println!(
+        "cargo:rustc-env=HELLO_FORMAT={}",
+        config.hello_message.format
+    );
+    println!(
+        "cargo:rustc-env=HELLO_SAMPLE_RATE={}",
+        config.hello_message.sample_rate
+    );
+    println!(
+        "cargo:rustc-env=HELLO_CHANNELS={}",
+        config.hello_message.channels
+    );
+    println!(
+        "cargo:rustc-env=HELLO_FRAME_DURATION={}",
+        config.hello_message.frame_duration
+    );
 }
-

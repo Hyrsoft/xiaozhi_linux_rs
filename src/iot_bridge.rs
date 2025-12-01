@@ -16,7 +16,8 @@ pub struct IotBridge {
 
 impl IotBridge {
     pub async fn new(config: &Config, tx: mpsc::Sender<IotEvent>) -> anyhow::Result<Self> {
-        let socket = UdpSocket::bind(format!("{}:{}", config.iot_local_ip, config.iot_local_port)).await?;
+        let socket =
+            UdpSocket::bind(format!("{}:{}", config.iot_local_ip, config.iot_local_port)).await?;
         let target_addr = format!("{}:{}", config.iot_remote_ip, config.iot_remote_port);
 
         Ok(Self {

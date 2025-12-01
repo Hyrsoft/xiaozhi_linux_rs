@@ -30,8 +30,8 @@ pub enum ActivationResult {
 pub async fn check_device_activation(config: &Config) -> ActivationResult {
     // 构造 HTTP URL
     // 从配置文件读取
-    let http_url = config.ota_url;
-    
+    let http_url = config.ota_url.as_ref();
+
     let client = Client::new();
 
     println!("Checking activation status via HTTP: {}", http_url);
@@ -40,20 +40,21 @@ pub async fn check_device_activation(config: &Config) -> ActivationResult {
     let body = json!({
         "uuid": config.client_id,
         "application": {
-            "name": env!("APP_NAME"), 
+            "name": env!("APP_NAME"),
             "version": env!("APP_VERSION")
         },
         "ota": {},
         "board": {
-            "type": env!("BOARD_TYPE"), 
-            "name": env!("BOARD_NAME") 
+            "type": env!("BOARD_TYPE"),
+            "name": env!("BOARD_NAME")
         }
     });
 
     // 构造请求
     // 参考 C++ control_center.cpp 中的 headers
     // 不包含 Authorization 和 Protocol-Version
-    let response = client.post(http_url)
+    let response = client
+        .post(http_url)
         .header("Device-Id", &config.device_id)
         .header("Content-Type", "application/json")
         .header("User-Agent", "weidongshan1")
