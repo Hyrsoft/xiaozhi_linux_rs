@@ -34,6 +34,8 @@ struct Audio {
     local_ip: String,
     remote_ip: String,
     buffer_size: usize,
+    capture_device: String,
+    playback_device: String,
 }
 
 #[derive(Deserialize)]
@@ -108,6 +110,14 @@ fn main() {
     println!(
         "cargo:rustc-env=AUDIO_BUFFER_SIZE={}",
         config.audio.buffer_size
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_CAPTURE_DEVICE={}",
+        config.audio.capture_device
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_PLAYBACK_DEVICE={}",
+        config.audio.playback_device
     );
 
     // GUI 配置
