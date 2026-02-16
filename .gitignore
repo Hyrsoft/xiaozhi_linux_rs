@@ -6,3 +6,6 @@
 # 忽略生成的config文件
 xiaozhi_config.json
 .DS_Store
+
+# 忽略编译中间文件
+uclibc_stub/

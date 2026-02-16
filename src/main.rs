@@ -127,14 +127,8 @@ async fn main() -> anyhow::Result<()> {
         net_link.run().await;
     });
 
-    // 启动音频桥，与音频进程通信
-    let audio_bridge = Arc::new(AudioBridge::new(&config, tx_audio_event).await?);
-    let audio_bridge_clone = audio_bridge.clone();
-    tokio::spawn(async move {
-        if let Err(e) = audio_bridge_clone.run().await {
-            eprintln!("AudioBridge error: {}", e);
-        }
-    });
+    // 启动音频桥（内置音频系统，无需外部进程）
+    let audio_bridge = Arc::new(AudioBridge::start(&config, tx_audio_event)?);
 
     // 初始化控制器
     let mut controller = CoreController::new(

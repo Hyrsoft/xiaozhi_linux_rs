@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
+use std::env;
 
 #[derive(Deserialize)]
 struct Config {
@@ -34,6 +35,8 @@ struct Audio {
     local_ip: String,
     remote_ip: String,
     buffer_size: usize,
+    capture_device: String,
+    playback_device: String,
 }
 
 #[derive(Deserialize)]
@@ -109,6 +112,14 @@ fn main() {
         "cargo:rustc-env=AUDIO_BUFFER_SIZE={}",
         config.audio.buffer_size
     );
+    println!(
+        "cargo:rustc-env=AUDIO_CAPTURE_DEVICE={}",
+        config.audio.capture_device
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_PLAYBACK_DEVICE={}",
+        config.audio.playback_device
+    );
 
     // GUI 配置
     println!("cargo:rustc-env=GUI_LOCAL_PORT={}", config.gui.local_port);
@@ -154,4 +165,21 @@ fn main() {
         "cargo:rustc-env=ENABLE_TTS_DISPLAY={}",
         config.features.enable_tts_display
     );
+
+    
+    // 交叉编译配置
+    let target = env::var("TARGET").unwrap_or_default();
+    
+    // 只在交叉编译到 uclibc 目标时链接 auxval_stub
+    if target.contains("uclibc") {
+        // 获取项目根目录
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let stub_dir = format!("{}/uclibc_stub", manifest_dir);
+        
+        // 使用 link-arg 确保在最后链接，解决链接顺序问题
+        println!("cargo:rustc-link-arg=-L{}", stub_dir);
+        println!("cargo:rustc-link-arg=-Wl,--push-state,--whole-archive");
+        println!("cargo:rustc-link-arg=-lauxval_stub");
+        println!("cargo:rustc-link-arg=-Wl,--pop-state");
+    }
 }

@@ -14,6 +14,10 @@ pub struct Config {
     pub audio_remote_ip: Cow<'static, str>,
     pub audio_buffer_size: usize,
 
+    // 音频设备配置（内置音频库）
+    pub capture_device: Cow<'static, str>,
+    pub playback_device: Cow<'static, str>,
+
     // GUI进程配置
     pub gui_local_port: u16,
     pub gui_remote_port: u16,
@@ -69,6 +73,10 @@ impl Config {
             audio_buffer_size: env!("AUDIO_BUFFER_SIZE")
                 .parse()
                 .map_err(|_| "Failed to parse AUDIO_BUFFER_SIZE")?,
+
+            // 音频设备配置
+            capture_device: Cow::Borrowed(env!("AUDIO_CAPTURE_DEVICE")),
+            playback_device: Cow::Borrowed(env!("AUDIO_PLAYBACK_DEVICE")),
 
             // GUI进程配置
             gui_local_port: env!("GUI_LOCAL_PORT")

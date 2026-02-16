@@ -190,9 +190,6 @@ impl CoreController {
                     eprintln!("Failed to send audio to NetLink: {}", e);
                 }
             }
-            AudioEvent::Command(cmd) => {
-                println!("Received Command from AudioBridge: {:?}", cmd);
-            }
         }
     }
 
