@@ -77,6 +77,7 @@ struct HelloMessage {
 #[derive(Deserialize)]
 struct Features {
     enable_tts_display: bool,
+    enable_tui: bool,
 }
 
 // 在编译时读取 config.toml 并设置环境变量
@@ -164,6 +165,10 @@ fn main() {
     println!(
         "cargo:rustc-env=ENABLE_TTS_DISPLAY={}",
         config.features.enable_tts_display
+    );
+    println!(
+        "cargo:rustc-env=ENABLE_TUI={}",
+        config.features.enable_tui
     );
 
     

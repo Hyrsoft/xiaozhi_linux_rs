@@ -20,11 +20,11 @@ use tokio::signal;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+#[cfg(feature = "tui")]
+use xiaozhi_tui::TuiApp;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 初始化日志
-    env_logger::init();
-
     // 加载配置（若不存在则根据编译时默认生成并持久化）
     let mut config = Config::load_or_create()?;
 
@@ -40,15 +40,43 @@ async fn main() -> anyhow::Result<()> {
 
     if config.client_id == "unknown-client" {
         config.client_id = Uuid::new_v4().to_string();
-        println!("Generated new Client ID: {}", config.client_id);
         config_dirty = true;
     }
 
     if config_dirty {
-        if let Err(e) = config.save() {
-            eprintln!("Failed to persist updated config: {}", e);
-        }
+        let _ = config.save();
     }
+
+    // --- TUI 初始化 ---
+    // 判断是否启用 TUI，如果启用则不初始化 env_logger（避免输出到终端干扰 TUI）
+    #[cfg(feature = "tui")]
+    let tui_active = config.enable_tui;
+    #[cfg(not(feature = "tui"))]
+    let tui_active = false;
+
+    if !tui_active {
+        // 仅在 TUI 关闭时初始化终端日志
+        env_logger::init();
+    }
+
+    #[cfg(feature = "tui")]
+    let tui_tx: Option<mpsc::Sender<xiaozhi_tui::TuiCommand>> = if config.enable_tui {
+        let (tui_app, tx) = TuiApp::new();
+
+        // 启动 TUI 事件循环
+        tokio::spawn(async move {
+            if let Err(e) = tui_app.run().await {
+                log::error!("TUI error: {}", e);
+            }
+        });
+
+        Some(tx)
+    } else {
+        None
+    };
+
+    #[cfg(not(feature = "tui"))]
+    let _tui_placeholder = (); // 无 TUI 功能时的占位
 
     // 创建通道，用于组件间通信
     // 事件通道
@@ -72,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
     let gui_bridge_clone = gui_bridge.clone();
     tokio::spawn(async move {
         if let Err(e) = gui_bridge_clone.run().await {
-            eprintln!("GuiBridge error: {}", e);
+            log::error!("GuiBridge error: {}", e);
         }
     });
 
@@ -81,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
     let iot_bridge_clone = iot_bridge.clone();
     tokio::spawn(async move {
         if let Err(e) = iot_bridge_clone.run().await {
-            eprintln!("IotBridge error: {}", e);
+            log::error!("IotBridge error: {}", e);
         }
     });
 
@@ -89,22 +117,22 @@ async fn main() -> anyhow::Result<()> {
     loop {
         match activation::check_device_activation(&config).await {
             activation::ActivationResult::Activated => {
-                println!("Device is activated. Starting WebSocket...");
+                log::info!("Device is activated. Starting WebSocket...");
                 if let Err(e) = gui_bridge
                     .send_message(r#"{"type":"toast", "text":"设备已激活"}"#)
                     .await
                 {
-                    eprintln!("Failed to send GUI message: {}", e);
+                    log::error!("Failed to send GUI message: {}", e);
                 }
                 break; // 跳出循环，继续下面的 NetLink 启动
             }
             activation::ActivationResult::NeedActivation(code) => {
-                println!("Device NOT activated. Code: {}", code);
+                log::info!("Device NOT activated. Code: {}", code);
 
                 // GUI 显示验证码
                 let gui_msg = format!(r#"{{"type":"activation", "code":"{}"}}"#, code);
                 if let Err(e) = gui_bridge.send_message(&gui_msg).await {
-                    eprintln!("Failed to send GUI message: {}", e);
+                    log::error!("Failed to send GUI message: {}", e);
                 }
 
                 // TTS 播报
@@ -115,7 +143,7 @@ async fn main() -> anyhow::Result<()> {
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
             activation::ActivationResult::Error(e) => {
-                eprintln!("Activation check error: {}. Retrying in 5s...", e);
+                log::error!("Activation check error: {}. Retrying in 5s...", e);
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         }
@@ -137,14 +165,16 @@ async fn main() -> anyhow::Result<()> {
         audio_bridge,
         gui_bridge,
         iot_bridge,
+        #[cfg(feature = "tui")]
+        tui_tx,
     );
 
-    println!("Xiaozhi Core Started. Entering Event Loop...");
+    log::info!("Xiaozhi Core Started. Entering Event Loop...");
 
     loop {
         tokio::select! {
             _ = signal::ctrl_c() => {
-                println!("Received Ctrl+C, shutting down...");
+                log::info!("Received Ctrl+C, shutting down...");
                 break;
             }
             Some(event) = rx_net_event.recv() => controller.handle_net_event(event).await,

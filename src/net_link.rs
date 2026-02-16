@@ -62,7 +62,7 @@ impl NetLink {
         let mut retry_delay = 1;
         loop {
             if let Err(e) = self.connect_and_loop().await {
-                eprintln!("Connection error: {}. Retrying in {}s...", e, retry_delay);
+                log::error!("Connection error: {}. Retrying in {}s...", e, retry_delay);
                 let _ = self.tx.send(NetEvent::Disconnected).await;
                 tokio::time::sleep(tokio::time::Duration::from_secs(retry_delay)).await;
                 retry_delay = std::cmp::min(retry_delay * 2, 60);
@@ -109,10 +109,10 @@ impl NetLink {
             .header("Protocol-Version", "1")
             .body(())?;
 
-        println!("Connecting to {}...", self.config.ws_url);
-        println!("Headers: {:?}", request.headers()); // Debug headers
+        log::info!("Connecting to {}...", self.config.ws_url);
+        log::info!("Headers: {:?}", request.headers()); // Debug headers
         let (ws_stream, _) = connect_async(request).await?;
-        println!("Connected!");
+        log::info!("Connected!");
 
         let (mut write, mut read) = ws_stream.split();
 
@@ -132,7 +132,7 @@ impl NetLink {
         };
         let hello_json = serde_json::to_string(&hello_msg)?;
 
-        println!("Sending Hello: {}", hello_json);
+        log::info!("Sending Hello: {}", hello_json);
         write.send(Message::Text(hello_json.into())).await?;
 
         // 主循环，处理读取和写入
@@ -143,14 +143,14 @@ impl NetLink {
                         Some(Ok(msg)) => {
                             match msg {
                                 Message::Text(text) => {
-                                    println!("Received Text: {}", text);
+                                    log::info!("Received Text: {}", text);
                                     self.tx.send(NetEvent::Text(text.to_string())).await?;
                                 }
                                 Message::Binary(data) => {
                                     self.tx.send(NetEvent::Binary(data.to_vec())).await?;
                                 }
                                 Message::Close(frame) => {
-                                    println!("Server closed connection: {:?}", frame);
+                                    log::info!("Server closed connection: {:?}", frame);
                                     return Err(anyhow::anyhow!("Connection closed"));
                                 }
                                 _ => {}

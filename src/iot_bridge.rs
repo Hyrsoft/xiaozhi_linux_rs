@@ -35,7 +35,7 @@ impl IotBridge {
             if len > 0 {
                 if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
                     if let Err(e) = self.tx.send(IotEvent::Message(msg.to_string())).await {
-                        eprintln!("Failed to send IoT event: {}", e);
+                        log::error!("Failed to send IoT event: {}", e);
                         break;
                     }
                 }

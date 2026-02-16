@@ -1,0 +1,12 @@
+[package]
+name = "tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["sync", "time"] }
+log = "0.4"
+anyhow = "1.0"
+rand = "0.8"

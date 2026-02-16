@@ -43,6 +43,7 @@ client_id = "unknown-client"
 # 功能开关
 [features]
 enable_tts_display = false
+enable_tui = true
 
 # Hello消息参数
 [hello_message]

@@ -1,13 +1,18 @@
 [workspace]
-members = ["audio"]
+members = ["audio", "tui"]
 
 [package]
 name = "xiaozhi_linux_rs"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["tui"]
+tui = ["dep:xiaozhi-tui"]
+
 [dependencies]
 audio = { path = "audio" }
+xiaozhi-tui = { path = "tui", package = "tui", optional = true }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

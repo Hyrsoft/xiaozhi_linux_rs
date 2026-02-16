@@ -49,6 +49,7 @@ pub struct Config {
 
     // 功能开关
     pub enable_tts_display: bool,
+    pub enable_tui: bool,
 }
 
 impl Config {
@@ -129,6 +130,9 @@ impl Config {
             enable_tts_display: env!("ENABLE_TTS_DISPLAY")
                 .parse()
                 .map_err(|_| "Failed to parse ENABLE_TTS_DISPLAY")?,
+            enable_tui: env!("ENABLE_TUI")
+                .parse()
+                .map_err(|_| "Failed to parse ENABLE_TUI")?,
         })
     }
 
