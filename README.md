@@ -1,8 +1,14 @@
 # Xiaozhi Linux
 
-## 项目简介
-
 ![logo](./docs/images/logo.png)
+
+[English](./README_en.md) | 简体中文 
+
+---
+
+
+
+## 项目简介
 
 本项目是小智 AI 客户端在 Linux 平台的完整实现，集成了**网络交互、音频处理、业务逻辑控制**。通过统一的 Rust 应用整合了音频、GUI 交互和云端通信，提供了现代化、高效的 AI 客户端方案。
 
