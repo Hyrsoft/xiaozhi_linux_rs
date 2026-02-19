@@ -73,7 +73,7 @@ graph TD
   - ALSA real-time audio capture and playback
   - Opus audio encoding (16kHz, PCM16) and decoding
   - SpeexDSP real-time processing (noise reduction, AGC, resampling)
-  - Support for custom audio device configuration
+  - Support for custom audio device configuration, see [Audio Device Configuration Guide](./docs/音频设备配置说明.md)
 
 - ✓ **Cloud Interaction and Protocol**
   - WebSocket full-duplex long connection with heartbeat keepalive
