@@ -65,29 +65,45 @@ graph TD
 - **Audio Processing**: Integrates ALSA for input/output, Opus codec, SpeexDSP real-time processing (noise reduction, AGC, resampling)
 - **Business Logic**: State machine management, device activation, command dispatch, OTA management
 
-## ✨ Core Features
+## ✨ Features
 
-- **Audio Processing**
+### Implemented Features
+
+- ✓ **Audio Processing**
   - ALSA real-time audio capture and playback
   - Opus audio encoding (16kHz, PCM16) and decoding
   - SpeexDSP real-time processing (noise reduction, AGC, resampling)
   - Support for custom audio device configuration
 
-- **Cloud Interaction and Protocol**
+- ✓ **Cloud Interaction and Protocol**
   - WebSocket full-duplex long connection with heartbeat keepalive
   - Device authentication and Hello handshake
   - TTS (Text-to-Speech), STT (Speech-to-Text), IoT control commands
 
-- **Device Management**
+- ✓ **Device Management**
   - Automatic device activation and binding
   - Device identity persistence (Client ID, Device ID)
   - State machine management (Idle, Listening, Processing, Speaking, Network Error)
-  - OTA upgrade support
 
-- **Configuration System**
+- ✓ **Configuration System**
   - TOML file configuration loading
   - Runtime parameter persistence
   - Environment variable override
+
+### Features To Be Implemented
+
+
+- ☐ **IoT and Smart Home Integration**
+
+- ☐ **Local Offline Wake-up and Audio Front-end Processing (AFE)**
+
+- ☐ **MCP Extension Capabilities**
+
+
+---
+
+
+> Note: In the ESP32 environment, Xiaozhi typically serves as the sole firmware program and must comprehensively manage all logic from low-level Wi-Fi drivers, provisioning protocols (BluFi/AP), and system self-updates (OTA) to auto-startup on boot. In Linux systems, however, Xiaozhi exists as an independent system process. Therefore, many features that must be built into the embedded version, such as provisioning, hardware drivers, and startup management, are delegated to more specialized components of the operating system in the Linux version. Similarly, OTA functionality will not be built into this project but will be implemented by other projects. See [OTA Documentation](./docs/OTA功能说明.md) for details.
 
 ## Quick Start
 
