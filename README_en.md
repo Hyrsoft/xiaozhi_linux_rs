@@ -141,7 +141,7 @@ Other Linux devices on different target platforms (including x86 virtual machine
 
 musl targets are not currently supported, as it's unclear how to statically link the required audio-related C libraries. This may be supported in the future.
 
-**Testing and Pull Requests are welcome** (for build scripts in boards and current sections of README).
+**Testing and Pull Requests are welcome** (for build scripts in scripts and current sections of README).
 
 ---
 
