@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# 加载共用下载函数（支持重试 + wget/curl 自动切换）
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../download_helper.sh"
+
 # =============================================================================
 # armv7-unknown-linux-musleabihf 完全静态链接编译脚本
 #
@@ -49,7 +52,7 @@ else
     TOOLCHAIN_URL="https://musl.cc/${TOOLCHAIN_TARBALL}"
 
     echo "下载: $TOOLCHAIN_URL"
-    wget -q --show-progress -O "$TARGET_DIR/${TOOLCHAIN_TARBALL}" "$TOOLCHAIN_URL"
+    download_file "$TOOLCHAIN_URL" "$TARGET_DIR/${TOOLCHAIN_TARBALL}"
     echo "解压工具链..."
     tar -xzf "$TARGET_DIR/${TOOLCHAIN_TARBALL}" -C "$TARGET_DIR"
     rm -f "$TARGET_DIR/${TOOLCHAIN_TARBALL}"
@@ -116,7 +119,7 @@ else
 
     if [ ! -d "$ALSA_SRC_DIR" ]; then
         echo "下载 alsa-lib..."
-        wget -q --show-progress -O "$BUILD_DIR/${ALSA_TARBALL}" "$ALSA_URL"
+        download_file "$ALSA_URL" "$BUILD_DIR/${ALSA_TARBALL}"
         echo "解压 alsa-lib..."
         tar -xjf "$BUILD_DIR/${ALSA_TARBALL}" -C "$BUILD_DIR"
         rm -f "$BUILD_DIR/${ALSA_TARBALL}"
@@ -155,7 +158,7 @@ else
 
     if [ ! -d "$OPUS_SRC_DIR" ]; then
         echo "下载 opus..."
-        wget -q --show-progress -O "$BUILD_DIR/${OPUS_TARBALL}" "$OPUS_URL"
+        download_file "$OPUS_URL" "$BUILD_DIR/${OPUS_TARBALL}"
         echo "解压 opus..."
         tar -xzf "$BUILD_DIR/${OPUS_TARBALL}" -C "$BUILD_DIR"
         rm -f "$BUILD_DIR/${OPUS_TARBALL}"
@@ -191,7 +194,7 @@ else
 
     if [ ! -d "$SPEEXDSP_SRC_DIR" ]; then
         echo "下载 speexdsp..."
-        wget -q --show-progress -O "$BUILD_DIR/${SPEEXDSP_TARBALL}" "$SPEEXDSP_URL"
+        download_file "$SPEEXDSP_URL" "$BUILD_DIR/${SPEEXDSP_TARBALL}"
         echo "解压 speexdsp..."
         tar -xzf "$BUILD_DIR/${SPEEXDSP_TARBALL}" -C "$BUILD_DIR"
         rm -f "$BUILD_DIR/${SPEEXDSP_TARBALL}"
