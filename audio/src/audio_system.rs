@@ -13,6 +13,7 @@ use anyhow::Result;
 use crate::alsa_device;
 use crate::opus_codec::{OpusDecoder, OpusEncoder};
 use crate::speex::Preprocessor;
+use crate::stream_decoder::StreamDecoder;
 
 /// Audio system configuration.
 #[derive(Debug, Clone)]
@@ -21,9 +22,9 @@ pub struct AudioConfig {
     pub capture_device: String,
     /// ALSA playback device name
     pub playback_device: String,
-    /// Desired ALSA sample rate (may be negotiated by hardware)
+    /// Desired ALSA sample rate for capture (may be negotiated by hardware)
     pub sample_rate: u32,
-    /// Desired ALSA channel count
+    /// Desired ALSA channel count for capture
     pub channels: u32,
     /// Opus codec sample rate (typically 24000)
     pub opus_sample_rate: u32,
@@ -35,6 +36,14 @@ pub struct AudioConfig {
     pub encode_frame_duration_ms: u32,
     /// Frame duration for Opus decoding in ms (e.g. 20)
     pub decode_frame_duration_ms: u32,
+    /// 网络下发流的编码格式: "opus", "mp3", "pcm"
+    pub stream_format: String,
+    /// Desired ALSA playback sample rate
+    pub playback_sample_rate: u32,
+    /// Desired ALSA playback channel count
+    pub playback_channels: u32,
+    /// Desired ALSA playback period size (0 = let ALSA decide)
+    pub playback_period_size: usize,
 }
 
 impl Default for AudioConfig {
@@ -49,6 +58,10 @@ impl Default for AudioConfig {
             opus_bitrate: 64000,
             encode_frame_duration_ms: 60,
             decode_frame_duration_ms: 20,
+            stream_format: "opus".to_string(),
+            playback_sample_rate: 48000,
+            playback_channels: 2,
+            playback_period_size: 1024,
         }
     }
 }
@@ -262,45 +275,67 @@ fn record_thread(
 
 // ======================== Playback thread ========================
 
+/// Factory function: create a decoder based on the configured playback format.
+fn create_decoder(
+    config: &AudioConfig,
+    alsa_rate: u32,
+    alsa_channels: u32,
+) -> Result<Box<dyn StreamDecoder>> {
+    match config.stream_format.as_str() {
+        "opus" => {
+            let decoder = OpusDecoder::new(
+                config.opus_sample_rate,
+                config.opus_channels,
+                config.decode_frame_duration_ms,
+                alsa_rate,
+                alsa_channels,
+            )?;
+            Ok(Box::new(decoder))
+        }
+        other => anyhow::bail!("Unsupported stream format: {}", other),
+    }
+}
+
 fn play_thread(
     config: &AudioConfig,
     mut opus_rx: mpsc::Receiver<Vec<u8>>,
     running: &AtomicBool,
 ) -> Result<()> {
-    // 1. Open ALSA playback device
+    // 1. Open ALSA playback device with configurable sample rate, channels, and period size
+    let period_size_opt = if config.playback_period_size > 0 {
+        Some(config.playback_period_size)
+    } else {
+        None
+    };
     let (pcm, params) = alsa_device::open_playback(
         &config.playback_device,
-        config.sample_rate,
-        config.channels,
+        config.playback_sample_rate,
+        config.playback_channels,
+        period_size_opt,
     )?;
 
     let actual_rate = params.sample_rate;
     let actual_channels = params.channels;
     let _period_size = params.period_size;
 
-    // 2. Initialize Opus decoder (with resampling + channel conversion)
-    let mut decoder = OpusDecoder::new(
-        config.opus_sample_rate,
-        config.opus_channels,
-        config.decode_frame_duration_ms,
-        actual_rate,
-        actual_channels,
-    )?;
+    // 2. Initialize decoder via factory pattern
+    let mut decoder = create_decoder(config, actual_rate, actual_channels)?;
 
     let io = pcm.io_i16()?;
 
     log::info!(
-        "Playback started: rate={}, ch={}, period={}",
+        "Playback started: stream_format={}, rate={}, ch={}, period={}",
+        config.stream_format,
         actual_rate,
         actual_channels,
         _period_size,
     );
 
     while running.load(Ordering::Relaxed) {
-        // Block until we receive an Opus packet (or channel closes)
+        // Block until we receive an audio packet (or channel closes)
         match opus_rx.blocking_recv() {
-            Some(opus_data) => {
-                match decoder.decode(&opus_data) {
+            Some(audio_data) => {
+                match decoder.decode(&audio_data) {
                     Ok(pcm_data) => {
                         if pcm_data.is_empty() {
                             continue;
@@ -330,7 +365,7 @@ fn play_thread(
                         }
                     }
                     Err(e) => {
-                        log::error!("Opus decode error: {}", e);
+                        log::error!("Audio decode error: {}", e);
                     }
                 }
             }

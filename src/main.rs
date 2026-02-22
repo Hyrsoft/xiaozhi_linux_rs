@@ -28,6 +28,12 @@ async fn main() -> anyhow::Result<()> {
     // 加载配置（若不存在则根据编译时默认生成并持久化）
     let mut config = Config::load_or_create()?;
 
+    // 立即进行严格校验 (Fail Fast)
+    if let Err(e) = config.validate() {
+        eprintln!("🛑 程序启动失败：{}", e);
+        std::process::exit(1);
+    }
+
     // 设备id和客户端id的处理
     let mut config_dirty = false;
     if config.device_id == "unknown-device" {
