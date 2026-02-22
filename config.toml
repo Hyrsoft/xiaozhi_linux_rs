@@ -48,10 +48,9 @@ frame_duration = 20
 enabled = true
 
 [[mcp.tools]]
-name = "linux.system_status"
-description = "Get system load, memory, and uptime information"
+name = "get_system_status"
+description = "获取当前设备的系统状态，包括 CPU 负载、内存使用率、磁盘空间和运行时间。当用户询问系统压力、运行多久、负载情况时调用。"
 executable = "./test_tool.sh"
 [mcp.tools.input_schema]
 type = "object"
-required = []
 [mcp.tools.input_schema.properties]
