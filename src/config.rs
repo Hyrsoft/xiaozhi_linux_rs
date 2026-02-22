@@ -5,11 +5,40 @@ use uuid::Uuid;
 
 const CONFIG_FILE_NAME: &str = "xiaozhi_config.json";
 
+/// 网络下发流的编码格式（源格式）
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AudioStreamFormat {
+    Opus,
+    Mp3,
+    Pcm,
+}
+
+impl AudioStreamFormat {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Opus => "opus",
+            Self::Mp3 => "mp3",
+            Self::Pcm => "pcm",
+        }
+    }
+}
+
+impl std::fmt::Display for AudioStreamFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     // 音频设备配置
     pub capture_device: Cow<'static, str>,
     pub playback_device: Cow<'static, str>,
+    pub stream_format: AudioStreamFormat,
+    pub playback_sample_rate: u32,
+    pub playback_channels: u32,
+    pub playback_period_size: usize,
 
     // GUI进程配置
     pub gui_local_port: u16,
@@ -53,10 +82,28 @@ impl Config {
     /// 从编译时设置的环境变量创建配置
     /// 所有参数都在编译时从 config.toml 中读取
     fn default_from_build() -> Result<Self, &'static str> {
+        // 解析编译时嵌入的 stream_format 字符串为枚举
+        let stream_format = match env!("AUDIO_STREAM_FORMAT") {
+            "opus" => AudioStreamFormat::Opus,
+            "mp3" => AudioStreamFormat::Mp3,
+            "pcm" => AudioStreamFormat::Pcm,
+            _ => return Err("Invalid AUDIO_STREAM_FORMAT value"),
+        };
+
         Ok(Self {
             // 音频设备配置
             capture_device: Cow::Borrowed(env!("AUDIO_CAPTURE_DEVICE")),
             playback_device: Cow::Borrowed(env!("AUDIO_PLAYBACK_DEVICE")),
+            stream_format,
+            playback_sample_rate: env!("AUDIO_PLAYBACK_SAMPLE_RATE")
+                .parse()
+                .map_err(|_| "Failed to parse AUDIO_PLAYBACK_SAMPLE_RATE")?,
+            playback_channels: env!("AUDIO_PLAYBACK_CHANNELS")
+                .parse()
+                .map_err(|_| "Failed to parse AUDIO_PLAYBACK_CHANNELS")?,
+            playback_period_size: env!("AUDIO_PLAYBACK_PERIOD_SIZE")
+                .parse()
+                .map_err(|_| "Failed to parse AUDIO_PLAYBACK_PERIOD_SIZE")?,
 
             // GUI进程配置
             gui_local_port: env!("GUI_LOCAL_PORT")
@@ -110,6 +157,41 @@ impl Config {
                 .parse()
                 .map_err(|_| "Failed to parse ENABLE_TTS_DISPLAY")?,
         })
+    }
+
+    /// 校验配置参数的合法性（Fail Fast）
+    pub fn validate(&self) -> anyhow::Result<()> {
+        // 校验音频格式支持情况
+        match self.stream_format {
+            AudioStreamFormat::Opus => {
+                log::info!("音频流格式校验通过: opus");
+            }
+            AudioStreamFormat::Mp3 => {
+                anyhow::bail!(
+                    "配置错误：当前版本尚未支持 mp3 格式解码，请改回 opus"
+                );
+            }
+            AudioStreamFormat::Pcm => {
+                log::info!("音频流格式校验通过: pcm (原始PCM直通)");
+            }
+        }
+
+        // 校验采样率是否在合理范围
+        if self.hello_sample_rate < 8000 || self.hello_sample_rate > 48000 {
+            anyhow::bail!(
+                "配置错误：hello采样率 {}Hz 不合法 (支持 8000-48000)",
+                self.hello_sample_rate
+            );
+        }
+
+        if self.playback_sample_rate < 8000 || self.playback_sample_rate > 192000 {
+            anyhow::bail!(
+                "配置错误：播放采样率 {}Hz 不合法 (支持 8000-192000)",
+                self.playback_sample_rate
+            );
+        }
+
+        Ok(())
     }
 
     /// 加载现有配置或使用默认值创建新文件

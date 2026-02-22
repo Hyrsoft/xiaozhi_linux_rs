@@ -17,16 +17,22 @@ pub struct AlsaParams {
 
 /// Open a PCM device for capture (recording).
 pub fn open_capture(device: &str, sample_rate: u32, channels: u32) -> Result<(PCM, AlsaParams)> {
-    open_pcm(device, Direction::Capture, sample_rate, channels, "Capture")
+    open_pcm(device, Direction::Capture, sample_rate, channels, None, "Capture")
 }
 
 /// Open a PCM device for playback.
-pub fn open_playback(device: &str, sample_rate: u32, channels: u32) -> Result<(PCM, AlsaParams)> {
+pub fn open_playback(
+    device: &str,
+    sample_rate: u32,
+    channels: u32,
+    period_size: Option<usize>,
+) -> Result<(PCM, AlsaParams)> {
     open_pcm(
         device,
         Direction::Playback,
         sample_rate,
         channels,
+        period_size,
         "Playback",
     )
 }
@@ -36,6 +42,7 @@ fn open_pcm(
     direction: Direction,
     sample_rate: u32,
     channels: u32,
+    period_size: Option<usize>,
     dir_name: &str,
 ) -> Result<(PCM, AlsaParams)> {
     let pcm = PCM::new(device, direction, false)
@@ -49,6 +56,9 @@ fn open_pcm(
         hwp.set_format(Format::S16LE)?;
         hwp.set_channels(channels)?;
         hwp.set_rate_near(sample_rate, ValueOr::Nearest)?;
+        if let Some(ps) = period_size {
+            hwp.set_period_size_near(ps as alsa::pcm::Frames, ValueOr::Nearest)?;
+        }
         pcm.hw_params(&hwp)?;
     }
 

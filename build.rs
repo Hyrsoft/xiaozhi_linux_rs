@@ -32,6 +32,10 @@ struct Board {
 struct Audio {
     capture_device: String,
     playback_device: String,
+    stream_format: String,
+    playback_sample_rate: u32,
+    playback_channels: u32,
+    playback_period_size: usize,
 }
 
 #[derive(Deserialize)]
@@ -100,6 +104,22 @@ fn main() {
     println!(
         "cargo:rustc-env=AUDIO_PLAYBACK_DEVICE={}",
         config.audio.playback_device
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_STREAM_FORMAT={}",
+        config.audio.stream_format
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_PLAYBACK_SAMPLE_RATE={}",
+        config.audio.playback_sample_rate
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_PLAYBACK_CHANNELS={}",
+        config.audio.playback_channels
+    );
+    println!(
+        "cargo:rustc-env=AUDIO_PLAYBACK_PERIOD_SIZE={}",
+        config.audio.playback_period_size
     );
 
     // GUI 配置

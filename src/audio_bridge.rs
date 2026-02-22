@@ -27,6 +27,10 @@ impl AudioBridge {
             opus_bitrate: 64000,
             encode_frame_duration_ms: 20,
             decode_frame_duration_ms: config.hello_frame_duration,
+            stream_format: config.stream_format.as_str().to_string(),
+            playback_sample_rate: config.playback_sample_rate,
+            playback_channels: config.playback_channels,
+            playback_period_size: config.playback_period_size,
         };
 
         let (opus_tx, mut opus_rx) = mpsc::channel::<Vec<u8>>(100);

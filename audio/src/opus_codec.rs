@@ -1,6 +1,5 @@
 //! Opus encoder/decoder with integrated Speex resampling and channel conversion.
 //!
-//! Mirrors the logic from the C++ `opus.cpp`:
 //! - Encoder: multi-channel input → channel mix → resample → Opus encode
 //! - Decoder: Opus decode → resample → channel convert
 
@@ -255,5 +254,15 @@ impl OpusDecoder {
             }
             Ok(out)
         }
+    }
+}
+
+// ======================== StreamDecoder impl ========================
+
+use crate::stream_decoder::StreamDecoder;
+
+impl StreamDecoder for OpusDecoder {
+    fn decode(&mut self, data: &[u8]) -> Result<Vec<i16>> {
+        OpusDecoder::decode(self, data)
     }
 }
