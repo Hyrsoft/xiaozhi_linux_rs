@@ -55,13 +55,6 @@ pub struct Config {
     pub gui_remote_ip: Cow<'static, str>,
     pub gui_buffer_size: usize,
 
-    // IoT进程配置
-    pub iot_local_port: u16,
-    pub iot_remote_port: u16,
-    pub iot_local_ip: Cow<'static, str>,
-    pub iot_remote_ip: Cow<'static, str>,
-    pub iot_buffer_size: usize,
-
     // 网络配置（静态部分）
     pub ws_url: Cow<'static, str>,
     pub ota_url: Cow<'static, str>,
@@ -128,19 +121,6 @@ impl Config {
             gui_buffer_size: env!("GUI_BUFFER_SIZE")
                 .parse()
                 .map_err(|_| "Failed to parse GUI_BUFFER_SIZE")?,
-
-            // IoT进程配置
-            iot_local_port: env!("IOT_LOCAL_PORT")
-                .parse()
-                .map_err(|_| "Failed to parse IOT_LOCAL_PORT")?,
-            iot_remote_port: env!("IOT_REMOTE_PORT")
-                .parse()
-                .map_err(|_| "Failed to parse IOT_REMOTE_PORT")?,
-            iot_local_ip: Cow::Borrowed(env!("IOT_LOCAL_IP")),
-            iot_remote_ip: Cow::Borrowed(env!("IOT_REMOTE_IP")),
-            iot_buffer_size: env!("IOT_BUFFER_SIZE")
-                .parse()
-                .map_err(|_| "Failed to parse IOT_BUFFER_SIZE")?,
 
             // 网络配置
             ws_url: Cow::Borrowed(env!("WS_URL")),

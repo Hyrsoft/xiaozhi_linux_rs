@@ -179,6 +179,8 @@ jobs:
           chmod +x release/probe_audio.sh
           cp scripts/test_tool.sh release/test_tool.sh
           chmod +x release/test_tool.sh
+          cp scripts/mcp_iot_fallback.sh release/mcp_iot_fallback.sh
+          chmod +x release/mcp_iot_fallback.sh
           ls -lh release/
 
       - name: Create Release

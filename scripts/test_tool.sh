@@ -1,24 +1,16 @@
 #!/bin/bash
-# test_tool.sh - Test script for MCP Gateway
-# Reads JSON from stdin, extracts the "command" field, and executes it.
+# test_tool.sh - Get system load, memory, and uptime information
+# Ignores input schema and returns system stats
 
-# (removed hardcoded cd command to make it generic)
-# Read from stdin
-INPUT=$(cat)
+echo "=== System Uptime & Load ==="
+uptime
 
-# Extract command using jq or grep
-# Simple fallback if jq is not installed:
-# COMMAND=$(echo "$INPUT" | grep -oP '(?<="command":")[^"]*')
-if command -v jq &> /dev/null; then
-  COMMAND=$(echo "$INPUT" | jq -r '.command')
-else
-  COMMAND=$(echo "$INPUT" | sed 's/.*"command"\s*:\s*"\([^"]*\)".*/\1/')
-fi
+echo ""
+echo "=== Memory Usage ==="
+free -h
 
-if [ -z "$COMMAND" ] || [ "$COMMAND" == "null" ]; then
-    echo "Error: No command provided in input schema" >&2
-    exit 1
-fi
+echo ""
+echo "=== Disk Usage (Root) ==="
+df -h /
 
-# Execute the parsed command safely and return standard output
-eval "$COMMAND"
+exit 0

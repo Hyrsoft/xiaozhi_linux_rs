@@ -1,13 +1,14 @@
 use crate::audio_bridge::{AudioBridge, AudioEvent};
 use crate::config::Config;
 use crate::gui_bridge::{GuiBridge, GuiEvent};
-use crate::iot_bridge::{IotBridge, IotEvent};
 use crate::net_link::{NetCommand, NetEvent};
 use crate::protocol::ServerMessage;
 use crate::state_machine::SystemState;
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::process::Command;
+use std::process::Stdio;
 
 pub struct CoreController {
     state: SystemState,
@@ -17,7 +18,6 @@ pub struct CoreController {
     net_tx: mpsc::Sender<NetCommand>,
     audio_bridge: Arc<AudioBridge>,
     gui_bridge: Arc<GuiBridge>,
-    iot_bridge: Arc<IotBridge>,
 }
 
 impl CoreController {
@@ -26,7 +26,6 @@ impl CoreController {
         net_tx: mpsc::Sender<NetCommand>,
         audio_bridge: Arc<AudioBridge>,
         gui_bridge: Arc<GuiBridge>,
-        iot_bridge: Arc<IotBridge>,
     ) -> Self {
         Self {
             state: SystemState::Idle,
@@ -36,7 +35,6 @@ impl CoreController {
             net_tx,
             audio_bridge,
             gui_bridge,
-            iot_bridge,
         }
     }
 
@@ -50,26 +48,12 @@ impl CoreController {
                 if let Err(e) = self.gui_bridge.send_message(r#"{"state": 3}"#).await {
                     eprintln!("Failed to send to GUI: {}", e);
                 }
-                if let Err(e) = self
-                    .iot_bridge
-                    .send_message(r#"{"type":"network", "state":"connected"}"#)
-                    .await
-                {
-                    eprintln!("Failed to send to IoT: {}", e);
-                }
             }
             NetEvent::Disconnected => {
                 println!("WebSocket Disconnected");
                 self.state = SystemState::NetworkError;
                 if let Err(e) = self.gui_bridge.send_message(r#"{"state": 4}"#).await {
                     eprintln!("Failed to send to GUI: {}", e);
-                }
-                if let Err(e) = self
-                    .iot_bridge
-                    .send_message(r#"{"type":"network", "state":"disconnected"}"#)
-                    .await
-                {
-                    eprintln!("Failed to send to IoT: {}", e);
                 }
             }
         }
@@ -111,9 +95,48 @@ impl CoreController {
                 if let Some(cmd) = &msg.command {
                     println!("Processing IoT Command: {}", cmd);
                 }
-                if let Err(e) = self.iot_bridge.send_message(&text).await {
-                    eprintln!("Failed to send to IoT: {}", e);
-                }
+                
+                // Fallback: 把接收到的完整 JSON 传递给外部脚本执行
+                let fallback_script = "./scripts/mcp_iot_fallback.sh";
+                let text_clone = text.clone();
+                tokio::spawn(async move {
+                    let mut child = match Command::new(fallback_script)
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped())
+                        .spawn()
+                    {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Failed to spawn IoT fallback script {}: {}", fallback_script, e);
+                            return;
+                        }
+                    };
+                    
+                    if let Some(mut stdin) = child.stdin.take() {
+                        use tokio::io::AsyncWriteExt;
+                        if let Err(e) = stdin.write_all(text_clone.as_bytes()).await {
+                            eprintln!("Failed to write to IoT fallback script stdin: {}", e);
+                        }
+                    }
+                    
+                    match child.wait_with_output().await {
+                        Ok(output) => {
+                            if !output.status.success() {
+                                let err_str = String::from_utf8_lossy(&output.stderr);
+                                eprintln!("IoT fallback script failed: {}", err_str);
+                            } else {
+                                let out_str = String::from_utf8_lossy(&output.stdout);
+                                if !out_str.trim().is_empty() {
+                                    println!("IoT fallback script output: {}", out_str);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to wait for IoT fallback script: {}", e);
+                        }
+                    }
+                });
             }
             "tts" => {
                 if let Some(state) = &msg.state {
@@ -197,15 +220,6 @@ impl CoreController {
     pub async fn handle_gui_event(&mut self, event: GuiEvent) {
         let GuiEvent::Message(msg) = event;
         println!("Received Message from GUI: {}", msg);
-        if let Err(e) = self.net_tx.send(NetCommand::SendText(msg)).await {
-            eprintln!("Failed to send text to NetLink: {}", e);
-        }
-    }
-
-    // 处理来自 IotBridge 的事件
-    pub async fn handle_iot_event(&mut self, event: IotEvent) {
-        let IotEvent::Message(msg) = event;
-        println!("Received Message from IoT: {}", msg);
         if let Err(e) = self.net_tx.send(NetCommand::SendText(msg)).await {
             eprintln!("Failed to send text to NetLink: {}", e);
         }

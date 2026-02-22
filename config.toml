@@ -24,14 +24,6 @@ local_ip = "0.0.0.0"
 remote_ip = "127.0.0.1"
 buffer_size = 4096
 
-# IoT进程配置
-[iot]
-local_port = 5680
-remote_port = 5681
-local_ip = "0.0.0.0"
-remote_ip = "127.0.0.1"
-buffer_size = 4096
-
 # 网络配置
 [network]
 ws_url = "wss://api.tenclass.net/xiaozhi/v1/"
@@ -56,12 +48,10 @@ frame_duration = 20
 enabled = true
 
 [[mcp.tools]]
-name = "linux.execute_bash"
-description = "Execute a safe bash command to get system status (default tool)"
+name = "linux.system_status"
+description = "Get system load, memory, and uptime information"
 executable = "./test_tool.sh"
 [mcp.tools.input_schema]
 type = "object"
-required = ["command"]
-[mcp.tools.input_schema.properties.command]
-type = "string"
-description = "The shell command to execute, e.g. 'free -h' or 'uptime'"
+required = []
+[mcp.tools.input_schema.properties]

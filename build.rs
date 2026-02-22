@@ -9,7 +9,6 @@ struct Config {
     board: Board,
     audio: Audio,
     gui: Gui,
-    iot: Iot,
     network: Network,
     hello_message: HelloMessage,
     features: Features,
@@ -41,15 +40,6 @@ struct Audio {
 
 #[derive(Deserialize)]
 struct Gui {
-    local_port: u16,
-    remote_port: u16,
-    local_ip: String,
-    remote_ip: String,
-    buffer_size: usize,
-}
-
-#[derive(Deserialize)]
-struct Iot {
     local_port: u16,
     remote_port: u16,
     local_ip: String,
@@ -129,13 +119,6 @@ fn main() {
     println!("cargo:rustc-env=GUI_LOCAL_IP={}", config.gui.local_ip);
     println!("cargo:rustc-env=GUI_REMOTE_IP={}", config.gui.remote_ip);
     println!("cargo:rustc-env=GUI_BUFFER_SIZE={}", config.gui.buffer_size);
-
-    // IoT config
-    println!("cargo:rustc-env=IOT_LOCAL_PORT={}", config.iot.local_port);
-    println!("cargo:rustc-env=IOT_REMOTE_PORT={}", config.iot.remote_port);
-    println!("cargo:rustc-env=IOT_LOCAL_IP={}", config.iot.local_ip);
-    println!("cargo:rustc-env=IOT_REMOTE_IP={}", config.iot.remote_ip);
-    println!("cargo:rustc-env=IOT_BUFFER_SIZE={}", config.iot.buffer_size);
 
     // 网络配置
     println!("cargo:rustc-env=WS_URL={}", config.network.ws_url);
