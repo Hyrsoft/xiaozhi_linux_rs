@@ -6,6 +6,8 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
 use uuid::Uuid;
+use std::sync::Arc;
+use crate::mcp_gateway::McpServer;
 
 #[derive(Debug)]
 pub enum NetEvent {
@@ -45,6 +47,7 @@ pub struct NetLink {
     config: Config,
     tx: mpsc::Sender<NetEvent>,
     rx_cmd: mpsc::Receiver<NetCommand>,
+    mcp_server: Arc<McpServer>,
 }
 
 impl NetLink {
@@ -52,8 +55,9 @@ impl NetLink {
         config: Config,
         tx: mpsc::Sender<NetEvent>,
         rx_cmd: mpsc::Receiver<NetCommand>,
+        mcp_server: Arc<McpServer>,
     ) -> Self {
-        Self { config, tx, rx_cmd }
+        Self { config, tx, rx_cmd, mcp_server }
     }
 
     // 如果发生错误断开连接，5秒后重连
@@ -143,8 +147,15 @@ impl NetLink {
                         Some(Ok(msg)) => {
                             match msg {
                                 Message::Text(text) => {
-                                    println!("Received Text: {}", text);
-                                    self.tx.send(NetEvent::Text(text.to_string())).await?;
+                                    // 尝试通过 MCP Server 处理 JSON-RPC 消息
+                                    if let Some(mcp_response) = self.mcp_server.handle_message(&text).await {
+                                        // 如果 MCP Server 识别并处理了 JSON-RPC，返回执行结果
+                                        write.send(Message::Text(mcp_response.into())).await?;
+                                    } else {
+                                        // 正常信令通道处理
+                                        println!("Received Text: {}", text);
+                                        self.tx.send(NetEvent::Text(text.to_string())).await?;
+                                    }
                                 }
                                 Message::Binary(data) => {
                                     self.tx.send(NetEvent::Binary(data.to_vec())).await?;

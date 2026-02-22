@@ -23,6 +23,7 @@ log = "0.4"
 env_logger = "0.11.8"
 mac_address = "1.1.8"
 uuid = { version = "1.18.1", features = ["v4"] }
+async-trait = "0.1.89"
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }

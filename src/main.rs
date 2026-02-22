@@ -4,6 +4,7 @@ mod config;
 mod controller;
 mod gui_bridge;
 mod iot_bridge;
+mod mcp_gateway;
 mod net_link;
 mod protocol;
 mod state_machine;
@@ -19,6 +20,7 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use crate::mcp_gateway::{init_mcp_gateway, ExternalToolConfig};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -55,6 +57,47 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("Failed to persist updated config: {}", e);
         }
     }
+
+    // 初始化 MCP Gateway 工具箱
+    let mcp_tools_path = std::path::Path::new("mcp_tools.json");
+    let mut mcp_configs = vec![];
+
+    if !mcp_tools_path.exists() {
+        // 如果不存在，生成一个默认模板
+        let default_config = serde_json::json!([
+          {
+            "name": "linux.execute_bash",
+            "description": "Execute a safe bash command to get system status (default tool)",
+            "executable": "./scripts/test_tool.sh",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "command": { "type": "string", "description": "The shell command to execute, e.g. 'free -h' or 'uptime'" }
+              },
+              "required": ["command"]
+            }
+          }
+        ]);
+        if let Ok(json_str) = serde_json::to_string_pretty(&default_config) {
+            if let Err(e) = std::fs::write(mcp_tools_path, json_str) {
+                eprintln!("Warning: Failed to create default mcp_tools.json: {}", e);
+            } else {
+                println!("Created default mcp_tools.json");
+            }
+        }
+    }
+
+    if mcp_tools_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(mcp_tools_path) {
+            if let Ok(configs) = serde_json::from_str::<Vec<ExternalToolConfig>>(&content) {
+                mcp_configs = configs;
+                println!("Loaded {} external MCP tools from mcp_tools.json", mcp_configs.len());
+            } else {
+                eprintln!("Warning: Failed to parse mcp_tools.json, using no external tools");
+            }
+        }
+    }
+    let mcp_server = Arc::new(init_mcp_gateway(mcp_configs));
 
     // 创建通道，用于组件间通信
     // 事件通道
@@ -128,7 +171,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 启动网络链接，与小智服务器通信
-    let net_link = NetLink::new(config.clone(), tx_net_event, rx_net_cmd);
+    let net_link = NetLink::new(config.clone(), tx_net_event, rx_net_cmd, mcp_server);
     tokio::spawn(async move {
         net_link.run().await;
     });

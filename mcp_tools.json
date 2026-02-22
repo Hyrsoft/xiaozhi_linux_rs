@@ -1,0 +1,19 @@
+[
+  {
+    "description": "Execute a safe bash command to get system status (default tool)",
+    "executable": "./scripts/test_tool.sh",
+    "input_schema": {
+      "properties": {
+        "command": {
+          "description": "The shell command to execute, e.g. 'free -h' or 'uptime'",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "name": "linux.execute_bash"
+  }
+]

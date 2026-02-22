@@ -2234,6 +2234,7 @@ name = "xiaozhi_linux_rs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "audio",
  "bytes",
  "config",
