@@ -1,6 +1,6 @@
 use crate::config::Config;
 use tokio::sync::mpsc;
-use audio::{AudioConfig, AudioSystem};
+use crate::audio::{AudioConfig, AudioSystem};
 
 pub enum AudioEvent {
     AudioData(Vec<u8>),

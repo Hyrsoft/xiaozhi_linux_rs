@@ -1,4 +1,5 @@
 mod activation;
+mod audio;
 mod audio_bridge;
 mod config;
 mod controller;

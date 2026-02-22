@@ -10,10 +10,10 @@ use tokio::sync::mpsc;
 
 use anyhow::Result;
 
-use crate::alsa_device;
-use crate::opus_codec::{OpusDecoder, OpusEncoder};
-use crate::speex::Preprocessor;
-use crate::stream_decoder::StreamDecoder;
+use super::alsa_device;
+use super::opus_codec::{OpusDecoder, OpusEncoder};
+use super::speex::Preprocessor;
+use super::stream_decoder::StreamDecoder;
 
 /// Audio system configuration.
 #[derive(Debug, Clone)]

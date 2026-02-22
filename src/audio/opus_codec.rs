@@ -3,7 +3,7 @@
 //! - Encoder: multi-channel input → channel mix → resample → Opus encode
 //! - Decoder: Opus decode → resample → channel convert
 
-use crate::speex::Resampler;
+use super::speex::Resampler;
 use anyhow::Result;
 
 // ======================== Opus Encoder ========================
@@ -259,7 +259,7 @@ impl OpusDecoder {
 
 // ======================== StreamDecoder impl ========================
 
-use crate::stream_decoder::StreamDecoder;
+use super::stream_decoder::StreamDecoder;
 
 impl StreamDecoder for OpusDecoder {
     fn decode(&mut self, data: &[u8]) -> Result<Vec<i16>> {
