@@ -14,3 +14,6 @@ third_party/
 
 # 忽略macOS文件
 .DS_Store
+
+# 参考项目
+xiaozhi-esp32/

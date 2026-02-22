@@ -81,15 +81,8 @@ impl CoreController {
         match msg.msg_type.as_str() {
             "hello" => {
                 println!("Server Hello received. Starting listen mode...");
-                let listen_cmd =
-                    r#"{"session_id":"","type":"listen","state":"start","mode":"auto"}"#;
-                if let Err(e) = self
-                    .net_tx
-                    .send(NetCommand::SendText(listen_cmd.to_string()))
-                    .await
-                {
-                    eprintln!("Failed to send listen command: {}", e);
-                }
+                // 使用正确的 session_id 发送 listen 命令
+                self.send_auto_listen_command().await;
             }
             "iot" => {
                 if let Some(cmd) = &msg.command {

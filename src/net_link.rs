@@ -2,6 +2,7 @@ use crate::config::Config;
 use futures_util::{SinkExt, StreamExt};
 use mac_address::get_mac_address;
 use serde::Serialize;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
@@ -32,6 +33,13 @@ struct AudioParams {
     frame_duration: u32,
 }
 
+// Features 声明结构体，用于告知服务端设备支持的能力
+#[derive(Serialize)]
+struct Features {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mcp: Option<bool>,
+}
+
 // Hello Message，用于初始化连接
 #[derive(Serialize)]
 struct HelloMessage {
@@ -39,8 +47,9 @@ struct HelloMessage {
     msg_type: String,
     version: u8,
     transport: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    features: Option<Features>,
     audio_params: AudioParams,
-    // device_id: String, // Removed to match C++ implementation
 }
 
 pub struct NetLink {
@@ -123,10 +132,17 @@ impl NetLink {
         self.tx.send(NetEvent::Connected).await?;
 
         // 发送Hello消息进行初始化链接
+        // 根据配置动态决定是否在 hello 中声明 MCP 能力
+        let features = if self.config.mcp.enabled {
+            Some(Features { mcp: Some(true) })
+        } else {
+            None
+        };
         let hello_msg = HelloMessage {
             msg_type: "hello".to_string(),
             version: 1,
             transport: "websocket".to_string(),
+            features,
             audio_params: AudioParams {
                 format: self.config.hello_format.to_string(),
                 sample_rate: self.config.hello_sample_rate,
@@ -147,11 +163,46 @@ impl NetLink {
                         Some(Ok(msg)) => {
                             match msg {
                                 Message::Text(text) => {
-                                    // 尝试通过 MCP Server 处理 JSON-RPC 消息
-                                    if let Some(mcp_response) = self.mcp_server.handle_message(&text).await {
-                                        // 如果 MCP Server 识别并处理了 JSON-RPC，返回执行结果
-                                        write.send(Message::Text(mcp_response.into())).await?;
+                                    // 尝试解析消息，检查是否为 MCP 信封格式
+                                    // 服务端下发的 MCP 消息格式: {"type":"mcp","payload":{JSON-RPC},"session_id":"..."}
+                                    let handled = if let Ok(envelope) = serde_json::from_str::<Value>(&text) {
+                                        if envelope.get("type").and_then(|t| t.as_str()) == Some("mcp") {
+                                            if let Some(payload) = envelope.get("payload") {
+                                                let payload_str = payload.to_string();
+                                                println!("MCP Request: {}", payload_str);
+                                                if let Some(mcp_response) = self.mcp_server.handle_message(&payload_str).await {
+                                                    if mcp_response.is_empty() {
+                                                        // 通知消息，无需回复
+                                                        true
+                                                    } else {
+                                                        // 将 MCP 响应包装回信封格式发送
+                                                        let session_id = envelope.get("session_id")
+                                                            .and_then(|s| s.as_str())
+                                                            .unwrap_or("");
+                                                        let response_envelope = json!({
+                                                            "type": "mcp",
+                                                            "session_id": session_id,
+                                                            "payload": serde_json::from_str::<Value>(&mcp_response).unwrap_or(Value::Null)
+                                                        });
+                                                        let response_text = serde_json::to_string(&response_envelope).unwrap();
+                                                        println!("MCP Response: {}", response_text);
+                                                        write.send(Message::Text(response_text.into())).await?;
+                                                        true
+                                                    }
+                                                } else {
+                                                    false
+                                                }
+                                            } else {
+                                                false
+                                            }
+                                        } else {
+                                            false
+                                        }
                                     } else {
+                                        false
+                                    };
+
+                                    if !handled {
                                         // 正常信令通道处理
                                         println!("Received Text: {}", text);
                                         self.tx.send(NetEvent::Text(text.to_string())).await?;

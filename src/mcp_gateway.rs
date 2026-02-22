@@ -131,6 +131,13 @@ impl McpServer {
             return None;
         }
 
+        // 按照 JSON-RPC 2.0 规范，通知消息（没有 id 字段）不需要响应
+        // 参考 xiaozhi-esp32: if (method_str.find("notifications") == 0) { return; }
+        if req.id.is_none() || req.method.starts_with("notifications") {
+            log::info!("MCP notification received (no response needed): {}", req.method);
+            return Some(String::new()); // 返回空字符串表示已处理但不发送响应
+        }
+
         let result = match req.method.as_str() {
             "initialize" => Ok(json!({
                 "protocolVersion": "2024-11-05",
