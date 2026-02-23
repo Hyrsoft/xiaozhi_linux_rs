@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 
 // ==========================================
@@ -76,6 +75,19 @@ fn default_timeout() -> u64 {
     5000
 }
 
+/// 异步工具执行完成后的通知方式
+/// 预留接口，当前仅支持 Disabled，后续可扩展 Webhook / LocalSocket / Mqtt 等
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum NotifyMethod {
+    #[default]
+    Disabled,
+    // 预留未来的接口：
+    // Webhook { url: String },
+    // LocalSocket { path: String },
+    // Mqtt { topic: String },
+}
+
 /// 统一的工具配置
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExternalToolConfig {
@@ -94,22 +106,14 @@ pub struct ExternalToolConfig {
     /// 传输协议配置（扁平化到同一层 JSON/TOML）
     #[serde(flatten)]
     pub transport: ToolTransport,
+
+    /// 异步任务完成后的通知方式（仅对 background 模式有效），默认为 disabled
+    #[serde(default)]
+    pub notify: NotifyMethod,
 }
 
 // ==========================================
-// 3. Background Task Notification
-// ==========================================
-
-/// 后台任务完成后发送给 CoreController 的通知
-#[derive(Debug)]
-pub struct BackgroundTaskResult {
-    pub tool_name: String,
-    pub success: bool,
-    pub message: String,
-}
-
-// ==========================================
-// 4. Tool Trait
+// 3. Tool Trait
 // ==========================================
 
 #[async_trait]
@@ -121,17 +125,16 @@ pub trait McpTool: Send + Sync {
 }
 
 // ==========================================
-// 5. DynamicTool — 多传输协议 + 多执行模式
+// 4. DynamicTool — 多传输协议 + 多执行模式
 // ==========================================
 
 pub struct DynamicTool {
     config: ExternalToolConfig,
-    bg_tx: mpsc::Sender<BackgroundTaskResult>,
 }
 
 impl DynamicTool {
-    pub fn new(config: ExternalToolConfig, bg_tx: mpsc::Sender<BackgroundTaskResult>) -> Self {
-        Self { config, bg_tx }
+    pub fn new(config: ExternalToolConfig) -> Self {
+        Self { config }
     }
 
     /// 根据传输协议类型分发执行（纯异步非阻塞）
@@ -249,10 +252,9 @@ impl McpTool for DynamicTool {
     }
 
     async fn call(&self, params: Value) -> Result<Value, String> {
-        // ---- 后台模式（对话级异步）：立刻返回，后台执行，完成后通知 CoreController ----
+        // ---- 后台模式（对话级异步）：立刻返回，后台执行，完成后仅打印日志 ----
         if self.config.mode == ExecutionMode::Background {
             let config_clone = self.config.clone();
-            let bg_tx = self.bg_tx.clone();
             let timeout_ms = self.config.timeout_ms;
 
             tokio::spawn(async move {
@@ -265,28 +267,34 @@ impl McpTool for DynamicTool {
                 )
                 .await
                 {
-                    Ok(Ok(value)) => BackgroundTaskResult {
-                        tool_name: config_clone.name.clone(),
-                        success: true,
-                        message: value
-                            .as_str()
-                            .unwrap_or(&value.to_string())
-                            .to_string(),
-                    },
-                    Ok(Err(err)) => BackgroundTaskResult {
-                        tool_name: config_clone.name.clone(),
-                        success: false,
-                        message: err,
-                    },
-                    Err(_) => BackgroundTaskResult {
-                        tool_name: config_clone.name.clone(),
-                        success: false,
-                        message: format!("后台任务超时 ({}ms)", timeout_ms),
-                    },
+                    Ok(Ok(value)) => {
+                        let msg = value.as_str().unwrap_or(&value.to_string()).to_string();
+                        log::info!("后台任务 [{}] 执行完成. 结果: {}", config_clone.name, msg);
+                        Ok(msg)
+                    }
+                    Ok(Err(err)) => {
+                        log::error!("后台任务 [{}] 执行失败. 错误: {}", config_clone.name, err);
+                        Err(err)
+                    }
+                    Err(_) => {
+                        log::error!("后台任务 [{}] 执行超时 ({}ms)", config_clone.name, timeout_ms);
+                        Err(format!("后台任务超时 ({}ms)", timeout_ms))
+                    }
                 };
 
-                if let Err(e) = bg_tx.send(result).await {
-                    log::error!("Failed to send background task result: {}", e);
+                // 根据 notify 配置决定通知方式（当前只支持 Disabled，仅打印日志）
+                match &config_clone.notify {
+                    NotifyMethod::Disabled => {
+                        match &result {
+                            Ok(msg) => log::info!("后台任务 [{}] 通知已禁用，结果已记录到日志: {}", config_clone.name, msg),
+                            Err(err) => log::info!("后台任务 [{}] 通知已禁用，错误已记录到日志: {}", config_clone.name, err),
+                        }
+                    }
+                    // 预留的防御性分支，防止未来加了配置但这里没实现
+                    #[allow(unreachable_patterns)]
+                    other => {
+                        log::warn!("后台任务 [{}] 配置了未实现的通知方式: {:?}，已忽略", config_clone.name, other);
+                    }
                 }
             });
 
@@ -313,7 +321,7 @@ impl McpTool for DynamicTool {
 }
 
 // ==========================================
-// 6. MCP Server Router
+// 5. MCP Server Router
 // ==========================================
 
 pub struct McpServer {
@@ -411,17 +419,16 @@ impl McpServer {
 }
 
 // ==========================================
-// 7. Setup helper
+// 6. Setup helper
 // ==========================================
 
 pub fn init_mcp_gateway(
     configs: Vec<ExternalToolConfig>,
-    bg_tx: mpsc::Sender<BackgroundTaskResult>,
 ) -> McpServer {
     let mut server = McpServer::new();
     for config in configs {
         let tool_name = config.name.clone();
-        let tool = DynamicTool::new(config, bg_tx.clone());
+        let tool = DynamicTool::new(config);
         server.register_tool(Box::new(tool));
         log::info!("Registered MCP Tool: {}", tool_name);
     }

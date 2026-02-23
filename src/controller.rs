@@ -1,7 +1,6 @@
 use crate::audio_bridge::{AudioBridge, AudioEvent};
 use crate::config::Config;
 use crate::gui_bridge::{GuiBridge, GuiEvent};
-use crate::mcp_gateway::BackgroundTaskResult;
 use crate::net_link::{NetCommand, NetEvent};
 use crate::protocol::ServerMessage;
 use crate::state_machine::SystemState;
@@ -19,8 +18,6 @@ pub struct CoreController {
     net_tx: mpsc::Sender<NetCommand>,
     audio_bridge: Arc<AudioBridge>,
     gui_bridge: Arc<GuiBridge>,
-    /// 后台任务完成后的待发通知队列，等待状态机进入 Idle 后发送
-    pending_bg_notifications: Vec<String>,
 }
 
 impl CoreController {
@@ -38,7 +35,6 @@ impl CoreController {
             net_tx,
             audio_bridge,
             gui_bridge,
-            pending_bg_notifications: Vec::new(),
         }
     }
 
@@ -145,14 +141,7 @@ impl CoreController {
                         self.should_mute_mic = false;
                         self.state = SystemState::Idle;
                         println!("TTS Stopped, unmuting mic");
-
-                        // 状态机调度：检查是否有等待发送的后台任务通知
-                        if let Some(notification) = self.pending_bg_notifications.first().cloned() {
-                            self.pending_bg_notifications.remove(0);
-                            self.send_bg_notification(notification).await;
-                        } else {
-                            self.send_auto_listen_command().await;
-                        }
+                        self.send_auto_listen_command().await;
                     }
                 }
 
@@ -228,47 +217,6 @@ impl CoreController {
         println!("Received Message from GUI: {}", msg);
         if let Err(e) = self.net_tx.send(NetCommand::SendText(msg)).await {
             eprintln!("Failed to send text to NetLink: {}", e);
-        }
-    }
-
-    // 处理后台任务完成的通知
-    pub async fn handle_background_result(&mut self, result: BackgroundTaskResult) {
-        let notification = if result.success {
-            format!(
-                "【系统后台通知：之前交代的任务 '{}' 已完成，结果是：{}。请用简短的语音告知用户。】",
-                result.tool_name, result.message
-            )
-        } else {
-            format!(
-                "【系统后台通知：之前交代的任务 '{}' 失败了，错误：{}。请向用户说明情况。】",
-                result.tool_name, result.message
-            )
-        };
-
-        println!("Background task completed: {}", notification);
-
-        // 状态机调度：只在 Idle 时立即发送，否则排队等待
-        if self.state == SystemState::Idle {
-            self.send_bg_notification(notification).await;
-        } else {
-            self.pending_bg_notifications.push(notification);
-            println!("Notification queued (current state: {:?}), {} pending",
-                self.state, self.pending_bg_notifications.len());
-        }
-    }
-
-    /// 将后台任务通知伪装成文本输入发送给云端，引导大模型主动发言
-    async fn send_bg_notification(&self, notification: String) {
-        let session_id = self.current_session_id.as_deref().unwrap_or("");
-        let msg = serde_json::json!({
-            "session_id": session_id,
-            "type": "listen",
-            "state": "detect",
-            "text": notification,
-            "mode": "manual"
-        });
-        if let Err(e) = self.net_tx.send(NetCommand::SendText(msg.to_string())).await {
-            eprintln!("Failed to send background notification: {}", e);
         }
     }
 }
