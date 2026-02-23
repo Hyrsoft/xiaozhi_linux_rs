@@ -92,14 +92,18 @@ graph TD
   - Runtime parameter persistence
   - Environment variable override
 
+- ✓ **MCP Extension Capabilities**
+  - Decoupled MCP gateway design supporting dynamic tool integration
+  - Standard JSON-RPC message processing and tool lifecycle management
+  - Communication with external scripts via stdin/stdout
+  - Dynamic tool configuration without recompilation, see [MCP Function Documentation](./docs/MCP功能说明.md)
+
 ### Features To Be Implemented
 
 
 - ☐ **IoT and Smart Home Integration**
 
 - ☐ **Local Offline Wake-up and Audio Front-end Processing (AFE)**
-
-- ☐ **MCP Extension Capabilities**
 
 
 ---

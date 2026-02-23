@@ -1,10 +1,15 @@
 ## 新特性
 
-- 修复 musl 版本不能使用 default 音频设备的问题
-- 添加 armv7-unknown-linux-gnueabihf 和 aarch64-unknown-linux-gnu 交叉编译支持，并发布基于 GCC8.3 编译的二进制文件，其中，alsa 为动态链接，opus 和 speexdsp 为静态链接
+- ✨ **MCP 扩展能力正式实现**
+  - 解耦的 MCP 网关设计，支持外部工具动态集成
+  - 标准 JSON-RPC 消息处理与工具生命周期管理
+  - 通过 stdin/stdout 与外部脚本通信
+  - 支持动态工具配置，修改配置文件后无需重新编译主程序即刻生效
+  - 详见 [MCP 功能说明文档](./docs/MCP功能说明.md)
+
 
 ## 部署说明
-Release 中分发的 GNU ABI 架构的二进制文件基于 GCC8.3 构建，无法在 glibc 版本低于 2.28 的系统上运行，低于 2.28 的系统请参照编译脚本自行编译。
+Release 中分发的 GNU ABI 二进制文件基于 GCC8.3 构建，无法在 glibc 版本低于 2.28 的系统上运行，低于 2.28 的系统请参照编译脚本自行编译。
 
 非必要不建议用基于 musl 构建的二进制，因为涉及底层 alsa 交互，如果设备的 alsa 使用 pipewire 作为后端，则 musl 构建的二进制无法链接对应的 alsa-plugins 库，导致无法使用。
 
