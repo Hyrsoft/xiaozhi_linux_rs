@@ -7,6 +7,8 @@
 mod alsa_device;
 mod audio_system;
 mod opus_codec;
+mod play;
+mod record;
 mod speex;
 pub mod stream_decoder;
 

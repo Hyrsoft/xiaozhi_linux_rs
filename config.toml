@@ -14,7 +14,7 @@ playback_device = "default"
 stream_format = "opus"          # 网络下发流的编码格式 "opus", "mp3", "pcm"
 playback_sample_rate = 48000
 playback_channels = 2
-playback_period_size = 1024     # 硬件缓冲区配置
+playback_period_size = 960     # 硬件缓冲区配置
 
 # GUI进程配置
 [gui]

@@ -32,17 +32,22 @@ QQ群：695113129
 
 ```mermaid
 graph TD
+    Config[配置文件<br/>xiaozhi_config.json]
+
     subgraph External [外部服务]
         Cloud[小智云端服务器 WebSocket/HTTP]
+        MCP_Ext[外部 MCP 服务<br/>进程/HTTP/TCP]
     end
 
     subgraph "Xiaozhi Linux App (本项目)"
         Net[网络模块]
         Audio[音频处理<br/>ALSA + Opus + SpeexDSP]
         Logic[状态机 & 业务逻辑]
+        MCP[MCP 网关<br/>动态加载多协议]
         
         Net <--> Logic
         Audio <--> Logic
+        Logic <--> MCP
     end
 
     subgraph "独立 GUI 进程 (可选)"
@@ -56,7 +61,11 @@ graph TD
         Touch[触控]
     end
 
+    Config -.->|启动时读取<br/>动态加载参数| Logic
+    Config -.->|动态加载工具| MCP
+
     Net <-->|WSS / HTTP| Cloud
+    MCP <-->|多协议交互| MCP_Ext
     Audio <--> Mic
     Audio <--> Speaker
     Logic <-->|IPC<br/>UDP事件| GUI
@@ -65,6 +74,8 @@ graph TD
     
     style Audio fill:#ace,stroke:#888,stroke-width:2px
     style GUI fill:#fcc,stroke:#888,stroke-width:2px
+    style Config fill:#eef,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5
+    style MCP fill:#efe,stroke:#888,stroke-width:2px
 ```
 
 - **网络模块**：维护与小智服务器的 WebSocket 长连接，处理心跳保活与断线重连
@@ -76,6 +87,7 @@ graph TD
 ### 已实现的功能
 
 - ✓ **音频处理**
+  - 支持 I2S 声卡和 USB 声卡
   - ALSA 实时音频采集与播放
   - Opus 音频编码（16kHz、PCM16）与解码
   - SpeexDSP 实时处理（降噪、AGC、重采样）
