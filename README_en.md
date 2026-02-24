@@ -28,17 +28,22 @@ QQ Group：695113129
 
 ```mermaid
 graph TD
+    Config[Configuration File<br/>xiaozhi_config.json]
+
     subgraph External [External Services]
         Cloud[Xiaozhi Cloud Server WebSocket/HTTP]
+        MCP_Ext[External MCP Service<br/>Process/HTTP/TCP]
     end
 
     subgraph "Xiaozhi Linux App (This Project)"
         Net[Network Module]
         Audio[Audio Processing<br/>ALSA + Opus + SpeexDSP]
         Logic[State Machine & Business Logic]
+        MCP[MCP Gateway<br/>Dynamically Loads Multi-Protocol]
         
         Net <--> Logic
         Audio <--> Logic
+        Logic <--> MCP
     end
 
     subgraph "Independent GUI Process (Optional)"
@@ -52,7 +57,11 @@ graph TD
         Touch[Touchscreen]
     end
 
+    Config -.->|Read at startup<br/>Dynamic Load Parameters| Logic
+    Config -.->|Dynamically Load Tools| MCP
+
     Net <-->|WSS / HTTP| Cloud
+    MCP <-->|Multi-Protocol Interaction| MCP_Ext
     Audio <--> Mic
     Audio <--> Speaker
     Logic <-->|IPC<br/>UDP Events| GUI
@@ -61,6 +70,8 @@ graph TD
     
     style Audio fill:#ace,stroke:#888,stroke-width:2px
     style GUI fill:#fcc,stroke:#888,stroke-width:2px
+    style Config fill:#eef,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5
+    style MCP fill:#efe,stroke:#888,stroke-width:2px
 ```
 
 - **Network Module**: Maintains WebSocket long connection with Xiaozhi server, handles heartbeat keepalive and reconnection on disconnection
@@ -72,6 +83,7 @@ graph TD
 ### Implemented Features
 
 - ✓ **Audio Processing**
+  - Support for I2S and USB audio cards
   - ALSA real-time audio capture and playback
   - Opus audio encoding (16kHz, PCM16) and decoding
   - SpeexDSP real-time processing (noise reduction, AGC, resampling)
