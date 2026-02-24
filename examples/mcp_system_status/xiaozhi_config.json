@@ -1,0 +1,40 @@
+{
+  "capture_device": "default",
+  "playback_device": "default",
+  "stream_format": "opus",
+  "playback_sample_rate": 48000,
+  "playback_channels": 2,
+  "playback_period_size": 1024,
+  "gui_local_port": 5678,
+  "gui_remote_port": 5679,
+  "gui_local_ip": "0.0.0.0",
+  "gui_remote_ip": "127.0.0.1",
+  "gui_buffer_size": 4096,
+  "ws_url": "wss://api.tenclass.net/xiaozhi/v1/",
+  "ota_url": "https://api.tenclass.net/xiaozhi/ota/",
+  "ws_token": "test-token",
+  "device_id": "dc:ec:4f:5d:96:29",
+  "client_id": "7f0b7da3-b51a-41f6-93bf-19d4713ca4fc",
+  "hello_format": "opus",
+  "hello_sample_rate": 24000,
+  "hello_channels": 1,
+  "hello_frame_duration": 20,
+  "enable_tts_display": false,
+  "mcp": {
+    "enabled": true,
+    "tools": [
+      {
+        "name": "get_system_status",
+        "description": "获取当前设备的系统状态，包括 CPU 负载、内存使用率、磁盘空间和运行时间。当用户询问系统压力、运行多久、负载情况时调用。",
+        "input_schema": {
+          "type": "object",
+          "properties": {}
+        },
+        "type": "subprocess",
+        "executable": "./system_status.sh",
+        "mode": "sync",
+        "timeout_ms": 5000
+      }
+    ]
+  }
+}
