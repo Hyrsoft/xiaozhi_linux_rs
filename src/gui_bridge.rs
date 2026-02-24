@@ -38,7 +38,7 @@ impl GuiBridge {
             if len > 0 {
                 if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
                     if let Err(e) = self.tx.send(GuiEvent::Message(msg.to_string())).await {
-                        eprintln!("Failed to send GUI event: {}", e);
+                        log::error!("Failed to send GUI event: {}", e);
                         break;
                     }
                 }

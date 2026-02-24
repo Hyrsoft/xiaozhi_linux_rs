@@ -36,7 +36,7 @@ impl AudioBridge {
         let (opus_tx, mut opus_rx) = mpsc::channel::<Vec<u8>>(100);
         let (play_tx, play_rx) = mpsc::channel::<Vec<u8>>(100);
 
-        println!(
+        log::info!(
             "AudioBridge: capture_device=\"{}\", playback_device=\"{}\"",
             audio_config.capture_device, audio_config.playback_device,
         );

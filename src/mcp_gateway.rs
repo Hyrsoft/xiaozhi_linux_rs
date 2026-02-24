@@ -259,7 +259,7 @@ impl McpTool for DynamicTool {
 
             tokio::spawn(async move {
                 log::info!(">>> 后台任务已启动: {}", config_clone.name);
-                eprintln!(">>> 后台任务已启动: {}", config_clone.name);
+                log::info!(">>> 后台任务已启动: {}", config_clone.name);
                 let timeout_duration = Duration::from_millis(timeout_ms);
 
                 let result = match timeout(
@@ -277,17 +277,17 @@ impl McpTool for DynamicTool {
                             }]
                         });
                         log::info!("✓ 后台任务 [{}] 执行完成 | MCP输出: {}", config_clone.name, mcp_output.to_string());
-                        eprintln!("✓ 后台任务 [{}] 执行完成 | 脚本输出: {}", config_clone.name, msg);
+                        log::info!("✓ 后台任务 [{}] 执行完成 | 脚本输出: {}", config_clone.name, msg);
                         Ok(msg)
                     }
                     Ok(Err(err)) => {
                         log::error!("✗ 后台任务 [{}] 执行失败 | 错误信息: {}", config_clone.name, err);
-                        eprintln!("✗ 后台任务 [{}] 执行失败 | 错误信息: {}", config_clone.name, err);
+                        log::error!("✗ 后台任务 [{}] 执行失败 | 错误信息: {}", config_clone.name, err);
                         Err(err)
                     }
                     Err(_) => {
                         log::error!("⏱ 后台任务 [{}] 执行超时 ({}ms)", config_clone.name, timeout_ms);
-                        eprintln!("⏱ 后台任务 [{}] 执行超时 ({}ms)", config_clone.name, timeout_ms);
+                        log::error!("⏱ 后台任务 [{}] 执行超时 ({}ms)", config_clone.name, timeout_ms);
                         Err(format!("后台任务超时 ({}ms)", timeout_ms))
                     }
                 };
@@ -297,13 +297,13 @@ impl McpTool for DynamicTool {
                     NotifyMethod::Disabled => {
                         // Disabled 模式：完成情况已在上方通过日志记录，此处无需额外操作
                         // 后续可扩展为 Webhook / LocalSocket / MQTT 等通知方式
-                        eprintln!("📝 后台任务 [{}] 完成结果已通过日志和标准错误输出记录", config_clone.name);
+                        log::info!("📝 后台任务 [{}] 完成结果已通过日志和标准错误输出记录", config_clone.name);
                     }
                     // 预留的防御性分支，防止未来加了配置但这里没实现
                     #[allow(unreachable_patterns)]
                     other => {
                         log::warn!("后台任务 [{}] 配置了未实现的通知方式: {:?}，已忽略", config_clone.name, other);
-                        eprintln!("⚠️ 后台任务 [{}] 配置了未实现的通知方式: {:?}", config_clone.name, other);
+                        log::warn!("⚠️ 后台任务 [{}] 配置了未实现的通知方式: {:?}", config_clone.name, other);
                     }
                 }
             });

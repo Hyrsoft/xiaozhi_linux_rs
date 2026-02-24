@@ -25,14 +25,25 @@ use crate::mcp_gateway::init_mcp_gateway;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 初始化日志
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format(|buf, record| {
+            use std::io::Write;
+            writeln!(
+                buf,
+                "[{} {:<5}] {}",
+                buf.timestamp(),
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
 
     // 加载配置（若不存在则根据编译时默认生成并持久化）
     let mut config = Config::load_or_create()?;
 
     // 立即进行严格校验 (Fail Fast)
     if let Err(e) = config.validate() {
-        eprintln!("🛑 程序启动失败：{}", e);
+        log::error!("🛑 程序启动失败：{}", e);
         std::process::exit(1);
     }
 
@@ -48,22 +59,22 @@ async fn main() -> anyhow::Result<()> {
 
     if config.client_id == "unknown-client" {
         config.client_id = Uuid::new_v4().to_string();
-        println!("Generated new Client ID: {}", config.client_id);
+        log::info!("Generated new Client ID: {}", config.client_id);
         config_dirty = true;
     }
 
     if config_dirty {
         if let Err(e) = config.save() {
-            eprintln!("Failed to persist updated config: {}", e);
+            log::error!("Failed to persist updated config: {}", e);
         }
     }
 
     // 初始化 MCP Gateway 工具箱
     let mcp_configs = if config.mcp.enabled {
-        println!("MCP Gateway is enabled. Loaded {} tools from configuration.", config.mcp.tools.len());
+        log::info!("MCP Gateway is enabled. Loaded {} tools from configuration.", config.mcp.tools.len());
         config.mcp.tools.clone()
     } else {
-        println!("MCP Gateway is disabled.");
+        log::info!("MCP Gateway is disabled.");
         vec![]
     };
 
@@ -88,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
     let gui_bridge_clone = gui_bridge.clone();
     tokio::spawn(async move {
         if let Err(e) = gui_bridge_clone.run().await {
-            eprintln!("GuiBridge error: {}", e);
+            log::error!("GuiBridge error: {}", e);
         }
     });
 
@@ -96,22 +107,22 @@ async fn main() -> anyhow::Result<()> {
     loop {
         match activation::check_device_activation(&config).await {
             activation::ActivationResult::Activated => {
-                println!("Device is activated. Starting WebSocket...");
+                log::info!("Device is activated. Starting WebSocket...");
                 if let Err(e) = gui_bridge
                     .send_message(r#"{"type":"toast", "text":"设备已激活"}"#)
                     .await
                 {
-                    eprintln!("Failed to send GUI message: {}", e);
+                    log::error!("Failed to send GUI message: {}", e);
                 }
                 break; // 跳出循环，继续下面的 NetLink 启动
             }
             activation::ActivationResult::NeedActivation(code) => {
-                println!("Device NOT activated. Code: {}", code);
+                log::info!("Device NOT activated. Code: {}", code);
 
                 // GUI 显示验证码
                 let gui_msg = format!(r#"{{"type":"activation", "code":"{}"}}"#, code);
                 if let Err(e) = gui_bridge.send_message(&gui_msg).await {
-                    eprintln!("Failed to send GUI message: {}", e);
+                    log::error!("Failed to send GUI message: {}", e);
                 }
 
                 // TTS 播报
@@ -122,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
             activation::ActivationResult::Error(e) => {
-                eprintln!("Activation check error: {}. Retrying in 5s...", e);
+                log::error!("Activation check error: {}. Retrying in 5s...", e);
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         }
@@ -145,12 +156,12 @@ async fn main() -> anyhow::Result<()> {
         gui_bridge,
     );
 
-    println!("Xiaozhi Core Started. Entering Event Loop...");
+    log::info!("Xiaozhi Core Started. Entering Event Loop...");
 
     loop {
         tokio::select! {
             _ = signal::ctrl_c() => {
-                println!("Received Ctrl+C, shutting down...");
+                log::info!("Received Ctrl+C, shutting down...");
                 break;
             }
             Some(event) = rx_net_event.recv() => controller.handle_net_event(event).await,

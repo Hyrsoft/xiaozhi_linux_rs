@@ -34,7 +34,7 @@ pub async fn check_device_activation(config: &Config) -> ActivationResult {
 
     let client = Client::new();
 
-    println!("Checking activation status via HTTP: {}", http_url);
+    log::info!("Checking activation status via HTTP: {}", http_url);
 
     // 构造请求体
     let body = json!({

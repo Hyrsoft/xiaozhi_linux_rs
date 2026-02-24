@@ -75,7 +75,7 @@ impl NetLink {
         let mut retry_delay = 1;
         loop {
             if let Err(e) = self.connect_and_loop().await {
-                eprintln!("Connection error: {}. Retrying in {}s...", e, retry_delay);
+                log::error!("Connection error: {}. Retrying in {}s...", e, retry_delay);
                 let _ = self.tx.send(NetEvent::Disconnected).await;
                 tokio::time::sleep(tokio::time::Duration::from_secs(retry_delay)).await;
                 retry_delay = std::cmp::min(retry_delay * 2, 60);
@@ -122,10 +122,10 @@ impl NetLink {
             .header("Protocol-Version", "1")
             .body(())?;
 
-        println!("Connecting to {}...", self.config.ws_url);
-        println!("Headers: {:?}", request.headers()); // Debug headers
+        log::info!("Connecting to {}...", self.config.ws_url);
+        log::debug!("Headers: {:?}", request.headers()); // Debug headers
         let (ws_stream, _) = connect_async(request).await?;
-        println!("Connected!");
+        log::info!("Connected!");
 
         let (mut write, mut read) = ws_stream.split();
 
@@ -152,7 +152,7 @@ impl NetLink {
         };
         let hello_json = serde_json::to_string(&hello_msg)?;
 
-        println!("Sending Hello: {}", hello_json);
+        log::info!("Sending Hello: {}", hello_json);
         write.send(Message::Text(hello_json.into())).await?;
 
         // 主循环，处理读取和写入
@@ -169,7 +169,7 @@ impl NetLink {
                                         if envelope.get("type").and_then(|t| t.as_str()) == Some("mcp") {
                                             if let Some(payload) = envelope.get("payload") {
                                                 let payload_str = payload.to_string();
-                                                println!("MCP Request: {}", payload_str);
+                                                log::info!("MCP Request: {}", payload_str);
                                                 if let Some(mcp_response) = self.mcp_server.handle_message(&payload_str).await {
                                                     if mcp_response.is_empty() {
                                                         // 通知消息，无需回复
@@ -185,7 +185,7 @@ impl NetLink {
                                                             "payload": serde_json::from_str::<Value>(&mcp_response).unwrap_or(Value::Null)
                                                         });
                                                         let response_text = serde_json::to_string(&response_envelope).unwrap();
-                                                        println!("MCP Response: {}", response_text);
+                                                        log::info!("MCP Response: {}", response_text);
                                                         write.send(Message::Text(response_text.into())).await?;
                                                         true
                                                     }
@@ -204,7 +204,7 @@ impl NetLink {
 
                                     if !handled {
                                         // 正常信令通道处理
-                                        println!("Received Text: {}", text);
+                                        log::info!("Received Text: {}", text);
                                         self.tx.send(NetEvent::Text(text.to_string())).await?;
                                     }
                                 }
@@ -212,7 +212,7 @@ impl NetLink {
                                     self.tx.send(NetEvent::Binary(data.to_vec())).await?;
                                 }
                                 Message::Close(frame) => {
-                                    println!("Server closed connection: {:?}", frame);
+                                    log::info!("Server closed connection: {:?}", frame);
                                     return Err(anyhow::anyhow!("Connection closed"));
                                 }
                                 _ => {}
