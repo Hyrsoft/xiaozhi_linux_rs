@@ -52,22 +52,13 @@ mkdir -p "$TARGET_DIR"
 
 # --- 1A. 下载 GNU 交叉编译工具链 ---
 TOOLCHAIN_NAME="gcc-arm-8.3-2019.02-x86_64-arm-linux-gnueabihf"
-TOOLCHAIN_DIR="$TARGET_DIR/$TOOLCHAIN_NAME"
+TOOLCHAIN_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
 
-if [ -x "$TOOLCHAIN_DIR/bin/${CROSS_PREFIX}-gcc" ]; then
-    echo "GNU 工具链已存在，跳过下载。"
-else
-    echo "=== 下载 GNU 交叉编译工具链 ==="
-    TOOLCHAIN_TARBALL="${TOOLCHAIN_NAME}.tar.xz"
-    TOOLCHAIN_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_TARBALL}"
-
-    echo "下载: $TOOLCHAIN_URL"
-    download_file "$TOOLCHAIN_URL" "$TARGET_DIR/${TOOLCHAIN_TARBALL}"
-    echo "解压工具链..."
-    tar -xJf "$TARGET_DIR/${TOOLCHAIN_TARBALL}" -C "$TARGET_DIR"
-    rm -f "$TARGET_DIR/${TOOLCHAIN_TARBALL}"
-    echo "工具链安装完成: $TOOLCHAIN_DIR"
-fi
+TOOLCHAIN_DIR=$(download_and_setup_toolchain \
+    "$TARGET_DIR" \
+    "$TOOLCHAIN_NAME" \
+    "$CROSS_PREFIX" \
+    "$TOOLCHAIN_URL")
 
 # 设置交叉编译工具路径
 CROSS_GCC="$TOOLCHAIN_DIR/bin/${CROSS_PREFIX}-gcc"
@@ -167,7 +158,7 @@ else
     # 否则 pkg-config 会返回 -L/usr/lib，指向宿主机的 x86_64 库
     sed -i "s|prefix=/usr|prefix=$ALSA_INSTALL_DIR/usr|" "$ALSA_INSTALL_DIR/usr/lib/pkgconfig/alsa.pc"
 
-    echo "alsa-lib 共享库编译完成!"
+echo "alsa-lib 共享库编译完成!"
 fi
 
 ALSA_SHARED_LIBDIR="$ALSA_INSTALL_DIR/usr/lib"
@@ -175,90 +166,7 @@ ALSA_SHARED_PKGCONFIG="$ALSA_INSTALL_DIR/usr/lib/pkgconfig"
 echo "ALSA 共享库: $ALSA_SHARED_LIBDIR"
 ls -la "$ALSA_SHARED_LIBDIR"/libasound.so* 2>/dev/null || true
 
-# --- 2B. 编译 Opus ---
-echo ""
-echo "=== Step 2B: 编译 opus ${OPUS_VERSION} (静态) ==="
-
-OPUS_SRC_DIR="$BUILD_DIR/opus-${OPUS_VERSION}"
-if [ -f "$STATIC_LIBDIR/libopus.a" ]; then
-    echo "opus 静态库已存在，跳过编译。"
-else
-    OPUS_TARBALL="opus-${OPUS_VERSION}.tar.gz"
-    OPUS_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${OPUS_TARBALL}"
-
-    if [ ! -d "$OPUS_SRC_DIR" ]; then
-        echo "下载 opus..."
-        download_file "$OPUS_URL" "$BUILD_DIR/${OPUS_TARBALL}"
-        echo "解压 opus..."
-        tar -xzf "$BUILD_DIR/${OPUS_TARBALL}" -C "$BUILD_DIR"
-        rm -f "$BUILD_DIR/${OPUS_TARBALL}"
-    fi
-
-    cd "$OPUS_SRC_DIR"
-    echo "配置 opus..."
-    ./configure \
-        --host="${CROSS_PREFIX}" \
-        --enable-static \
-        --disable-shared \
-        --disable-doc \
-        --disable-extra-programs \
-        --prefix="/usr" \
-        --quiet
-
-    echo "编译 opus (使用 ${NPROC} 线程)..."
-    make -j"$NPROC" --quiet
-    make DESTDIR="$STATIC_SYSROOT" install --quiet
-    
-    # 修正 opus.pc 中的宿主机绝对路径
-    sed -i "s|prefix=/usr|prefix=$STATIC_SYSROOT/usr|" "$STATIC_SYSROOT/usr/lib/pkgconfig/opus.pc"
-    
-    echo "opus 编译完成!"
-fi
-
-# --- 2C. 编译 SpeexDSP ---
-echo ""
-echo "=== Step 2C: 编译 speexdsp ${SPEEXDSP_VERSION} (静态) ==="
-
-SPEEXDSP_SRC_DIR="$BUILD_DIR/speexdsp-${SPEEXDSP_VERSION}"
-if [ -f "$STATIC_LIBDIR/libspeexdsp.a" ]; then
-    echo "speexdsp 静态库已存在，跳过编译。"
-else
-    SPEEXDSP_TARBALL="speexdsp-${SPEEXDSP_VERSION}.tar.gz"
-    SPEEXDSP_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${SPEEXDSP_TARBALL}"
-
-    if [ ! -d "$SPEEXDSP_SRC_DIR" ]; then
-        echo "下载 speexdsp..."
-        download_file "$SPEEXDSP_URL" "$BUILD_DIR/${SPEEXDSP_TARBALL}"
-        echo "解压 speexdsp..."
-        tar -xzf "$BUILD_DIR/${SPEEXDSP_TARBALL}" -C "$BUILD_DIR"
-        rm -f "$BUILD_DIR/${SPEEXDSP_TARBALL}"
-    fi
-
-    cd "$SPEEXDSP_SRC_DIR"
-    echo "配置 speexdsp..."
-    ./configure \
-        --host="${CROSS_PREFIX}" \
-        --enable-static \
-        --disable-shared \
-        --prefix="/usr" \
-        --quiet
-
-    echo "编译 speexdsp (使用 ${NPROC} 线程)..."
-    make -j"$NPROC" --quiet
-    make DESTDIR="$STATIC_SYSROOT" install --quiet
-    
-    # 修正 speexdsp.pc 中的宿主机绝对路径
-    sed -i "s|prefix=/usr|prefix=$STATIC_SYSROOT/usr|" "$STATIC_SYSROOT/usr/lib/pkgconfig/speexdsp.pc"
-    
-    echo "speexdsp 编译完成!"
-fi
-
 cd "$PROJECT_ROOT"
-
-echo ""
-echo "=== 所有 C 依赖库编译完成 ==="
-echo "静态库目录: $STATIC_LIBDIR"
-ls -la "$STATIC_LIBDIR"/*.a 2>/dev/null || echo "（无 .a 文件，请检查编译日志）"
 
 # =============================================================================
 # 3. 设置 Rust 交叉编译环境
@@ -283,9 +191,9 @@ export CFLAGS_armv7_unknown_linux_gnueabihf="-fPIC"
 
 # 混合链接：不使用 +crt-static，保持 libc/libdl 动态链接
 # GCC 自带 sysroot 提供 libpthread/libdl/libm/libc 等系统库，无需 --sysroot
-# -L 指向：静态库目录（opus/speexdsp）和 ALSA 共享库目录
+# -L 指向 ALSA 共享库目录
 # --no-as-needed：确保 -lpthread -ldl -lm 不会被 Rust 注入的 --as-needed 丢弃
-export RUSTFLAGS="-C link-arg=-L$STATIC_LIBDIR -C link-arg=-L$ALSA_SHARED_LIBDIR -C link-arg=-Wl,--no-as-needed -C link-arg=-ldl -C link-arg=-lpthread -C link-arg=-lm"
+export RUSTFLAGS="-C link-arg=-L$ALSA_SHARED_LIBDIR -C link-arg=-Wl,--no-as-needed -C link-arg=-ldl -C link-arg=-lpthread -C link-arg=-lm"
 
 # 告诉 audiopus_sys 使用静态链接 opus
 export LIBOPUS_STATIC=1
@@ -297,13 +205,10 @@ export LIBOPUS_STATIC=1
 
 # pkg-config 配置
 export PKG_CONFIG_ALLOW_CROSS=1
-# 使用 PKG_CONFIG_LIBDIR（而非 PKG_CONFIG_PATH）完全替换系统默认搜索路径，
-# 避免 pkg-config 泄漏宿主机的 /usr/lib（x86_64）到交叉编译的链接参数中
-export PKG_CONFIG_LIBDIR="$STATIC_LIBDIR/pkgconfig:$ALSA_SHARED_PKGCONFIG"
+export PKG_CONFIG_LIBDIR="$ALSA_SHARED_PKGCONFIG"
 export PKG_CONFIG_SYSROOT_DIR=""
 
 echo "CC:           $CROSS_GCC"
-echo "STATIC_LIBS:  $STATIC_SYSROOT"
 echo "RUSTFLAGS:    $RUSTFLAGS"
 
 # =============================================================================
@@ -311,11 +216,23 @@ echo "RUSTFLAGS:    $RUSTFLAGS"
 # =============================================================================
 
 echo ""
-echo "=== Step 4: 编译 Rust 项目 (ALSA 动态 + Opus/SpeexDSP 静态) ==="
+echo "=== Step 4: 编译 Rust 项目 ==="
 echo "Building in: $PROJECT_ROOT"
 echo "Target: $TARGET"
 
-cargo build \
+# 避免干扰 host build 脚本的编译，取消通用 CC 变量，依赖特化的 CC_armv7_unknown...
+unset CC CXX AR RANLIB STRIP CFLAGS CXXFLAGS
+
+# 绕过 audiopus_sys 的 cmake 构建（因为 cmake < 3.5 报错，且我们在 build.rs 中统一编译）
+# 创建一个真的 libopus.a 桩文件，欺骗 audiopus_sys 让它不要自己编译
+DUMMY_OPUS_DIR="$PROJECT_ROOT/target/dummy_opus"
+mkdir -p "$DUMMY_OPUS_DIR/lib"
+echo "void opus_dummy() {}" > "$DUMMY_OPUS_DIR/dummy.c"
+$CROSS_GCC -c "$DUMMY_OPUS_DIR/dummy.c" -o "$DUMMY_OPUS_DIR/dummy.o"
+$CROSS_AR rcs "$DUMMY_OPUS_DIR/lib/libopus.a" "$DUMMY_OPUS_DIR/dummy.o"
+export OPUS_LIB_DIR="$DUMMY_OPUS_DIR"
+
+cargo build -vv \
     --target "$TARGET" \
     --release
 

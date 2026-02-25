@@ -1,27 +1,48 @@
 ## armv7-unknown-linux-uclibceabihf 交叉编译说明
 
-### 工具链路径
-需根据具体的交叉编译工具链路径和 sysroot 路径，修改 build.sh 脚本中的如下部分：
+### 概述
+
+本脚本自动完成以下步骤，生成使用 uClibc 动态链接的 ARM 二进制文件：
+
+1. **下载 uClibc 交叉编译工具链** — 从 GitHub Releases 下载（已有则跳过）
+2. **下载并编译 alsa-lib 共享库** — 仅用于链接时符号解析，运行时使用设备系统库
+3. **配置 Rust 交叉编译环境** — 设置 CC、pkg-config、链接标志
+4. **编译 Rust 项目** — 使用 `cargo +nightly build -Z build-std` 输出混合链接二进制
+
+### 链接策略
+
+- **动态链接**: libc (uClibc) + libasound.so
+- **静态链接**: opus + speexdsp（由 build.rs 自动从源码编译）
+
+### 前置条件
+
+- **Rust nightly 工具链** — `rustup toolchain install nightly`
+- **rust-src 组件** — `rustup component add rust-src --toolchain nightly`
+- **构建工具** — `wget` 或 `curl`、`make`、`tar`
+
+### 使用方法
+
 ```bash
-export TOOLCHAIN_PATH="/path/to/your/toolchain"
-SYSROOT="/path/to/your/sysroot"
+# 执行编译（工具链会自动下载）
+bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
+
+# 输出文件
+# target/armv7-unknown-linux-uclibceabihf/release/xiaozhi_linux_rs
 ```
 
-### 配置示例
-以下是基于 RV1106 (Luckfox Pico) 的配置示例：
-```bash
-# 工具链路径
-TOOLCHAIN_PATH="/home/hao/projects/luckfox-pico/tools/linux/toolchain/arm-rockchip830-linux-uclibcgnueabihf"
+### 目标设备
 
-# sysroot 路径（来自 buildroot 输出）
-SYSROOT="/home/hao/projects/luckfox-pico/sysdrv/source/buildroot/buildroot-2023.02.6/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot"
+适用于 RV1106 (Luckfox Pico) 等使用 uClibc 的 ARM 设备。
 
-# 交叉编译工具
-CROSS_GCC="$TOOLCHAIN_PATH/bin/arm-rockchip830-linux-uclibcgnueabihf-gcc"
-CROSS_CXX="$TOOLCHAIN_PATH/bin/arm-rockchip830-linux-uclibcgnueabihf-g++"
-AR="$TOOLCHAIN_PATH/bin/arm-rockchip830-linux-uclibcgnueabihf-ar"
-```
+### 缓存机制
+
+所有下载和编译产物缓存在 `third_party/armv7-unknown-linux-uclibceabihf/` 目录下：
+- `arm-rockchip830-linux-uclibcgnueabihf/` — uClibc 交叉编译工具链
+- `alsa-shared/` — ALSA 共享库（仅链接时使用）
+- `build/` — C 依赖库源码与编译中间产物
 
 ### uClibc 特别说明
 
-经实际编译测试，RV1106 的 buildroot sdk，提供的 uClibc std 相对 rust 工具链提供的版本，缺少了`getauxval`函数的实现，因此在链接阶段会找不到函数定义。解决方法是手动实现一个空的`getauxval`函数，编译为静态库，在最后链接进可执行文件。
+uClibc 缺少 `getauxval` 函数的实现，因此在链接阶段会找不到函数定义。
+解决方法是在 `auxval_stub.c` 中提供一个空的 `getauxval` 实现，
+由 build.rs 自动编译为静态库并链接进可执行文件。

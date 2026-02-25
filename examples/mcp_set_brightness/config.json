@@ -1,0 +1,29 @@
+{
+  "mcp": {
+    "enabled": true,
+    "tools": [
+      {
+        "name": "set_brightness",
+        "description": "设置设备屏幕的亮度。当用户说'调亮一点'或'把亮度设置为80'时调用。",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "brightness": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "目标亮度值，范围从0（最暗）到100（最亮）"
+            }
+          },
+          "required": [
+            "brightness"
+          ]
+        },
+        "type": "subprocess",
+        "executable": "./set_brightness.py",
+        "mode": "sync",
+        "timeout_ms": 5000
+      }
+    ]
+  }
+}

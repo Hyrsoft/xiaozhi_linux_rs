@@ -1,0 +1,19 @@
+{
+    "mcp": {
+        "enabled": true,
+        "tools": [
+            {
+                "name": "play_music",
+                "description": "让远端音乐播放器播放音乐。当用户要求启动播放器时调用。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "type": "tcp",
+                "address": "192.168.8.249:8899",
+                "mode": "sync",
+                "timeout_ms": 5000
+            }
+        ]
+    }
+}
