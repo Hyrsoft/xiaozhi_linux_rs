@@ -9,9 +9,8 @@ on:
         type: choice
         options:
           - all
-          - armv7-unknown-linux-musleabihf
+          - armv7-unknown-linux-uclibceabihf
           - armv7-unknown-linux-gnueabihf
-          - aarch64-unknown-linux-musl
           - aarch64-unknown-linux-gnu
         default: 'all'
       version:
@@ -20,8 +19,8 @@ on:
         default: 'v1.0.0'
 
 jobs:
-  build-armv7:
-    if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == 'armv7-unknown-linux-musleabihf' }}
+  build-armv7-uclibc:
+    if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == 'armv7-unknown-linux-uclibceabihf' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,7 +29,8 @@ jobs:
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
-          targets: armv7-unknown-linux-musleabihf
+          targets: armv7-unknown-linux-uclibceabihf
+          components: rust-src
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y wget make pkg-config libasound2-dev
@@ -38,47 +38,17 @@ jobs:
       - name: Cache toolchain & C libraries
         uses: actions/cache@v4
         with:
-          path: third_party/armv7-unknown-linux-musleabihf
-          key: musl-armv7-toolchain-v2
+          path: third_party/armv7-unknown-linux-uclibceabihf
+          key: uclibc-armv7-toolchain-v2
 
-      - name: Build (armv7-unknown-linux-musleabihf)
-        run: bash scripts/armv7-unknown-linux-musleabihf/build.sh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: xiaozhi_linux_rs-armv7-musleabihf
-          path: target/armv7-unknown-linux-musleabihf/release/xiaozhi_linux_rs
-
-  build-aarch64-musl:
-    if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == 'aarch64-unknown-linux-musl' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: aarch64-unknown-linux-musl
-
-      - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y wget make pkg-config libasound2-dev
-
-      - name: Cache toolchain & C libraries
-        uses: actions/cache@v4
-        with:
-          path: third_party/aarch64-unknown-linux-musl
-          key: musl-aarch64-toolchain-v2
-
-      - name: Build (aarch64-unknown-linux-musl)
-        run: bash scripts/aarch64-unknown-linux-musl/build.sh
+      - name: Build (armv7-unknown-linux-uclibceabihf)
+        run: bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xiaozhi_linux_rs-aarch64-musl
-          path: target/aarch64-unknown-linux-musl/release/xiaozhi_linux_rs
+          name: xiaozhi_linux_rs-armv7-uclibceabihf
+          path: target/armv7-unknown-linux-uclibceabihf/release/xiaozhi_linux_rs
 
   build-aarch64-gnu:
     if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == 'aarch64-unknown-linux-gnu' }}
@@ -142,7 +112,7 @@ jobs:
 
   release:
     if: ${{ always() && !cancelled() }}
-    needs: [build-armv7, build-armv7-gnu, build-aarch64-musl, build-aarch64-gnu]
+    needs: [build-armv7-uclibc, build-armv7-gnu, build-aarch64-gnu]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -158,13 +128,10 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          if [ -f artifacts/xiaozhi_linux_rs-armv7-musleabihf/xiaozhi_linux_rs ]; then
-            cp artifacts/xiaozhi_linux_rs-armv7-musleabihf/xiaozhi_linux_rs release/xiaozhi_linux_rs-armv7-musleabihf
-            chmod +x release/xiaozhi_linux_rs-armv7-musleabihf
-          fi
-          if [ -f artifacts/xiaozhi_linux_rs-aarch64-musl/xiaozhi_linux_rs ]; then
-            cp artifacts/xiaozhi_linux_rs-aarch64-musl/xiaozhi_linux_rs release/xiaozhi_linux_rs-aarch64-musl
-            chmod +x release/xiaozhi_linux_rs-aarch64-musl
+
+          if [ -f artifacts/xiaozhi_linux_rs-armv7-uclibceabihf/xiaozhi_linux_rs ]; then
+            cp artifacts/xiaozhi_linux_rs-armv7-uclibceabihf/xiaozhi_linux_rs release/xiaozhi_linux_rs-armv7-uclibceabihf
+            chmod +x release/xiaozhi_linux_rs-armv7-uclibceabihf
           fi
           if [ -f artifacts/xiaozhi_linux_rs-aarch64-gnu/xiaozhi_linux_rs ]; then
             cp artifacts/xiaozhi_linux_rs-aarch64-gnu/xiaozhi_linux_rs release/xiaozhi_linux_rs-aarch64-gnu
