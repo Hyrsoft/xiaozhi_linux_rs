@@ -114,7 +114,8 @@ graph TD
 - ✓ **MCP 扩展能力**
   - 解耦的 MCP 网关设计，支持外部工具动态集成
   - 标准 JSON-RPC 消息处理与工具生命周期管理
-  - 通过 stdin/stdout 与外部脚本通信
+  - Subprocess、HTTP、TCP 多种通信方式
+  - sync 和 background 两种模式
   - 支持动态工具配置，修改后无需重新编译，参考[MCP 功能说明](./docs/MCP功能说明.md)
   - 提供多种 MCP 示例，参考`examples`目录
 
@@ -232,6 +233,8 @@ rustup component add rust-src --toolchain nightly
 ## 贡献
 
 如果你对嵌入式 Rust、Linux 网络编程感兴趣，欢迎提交 Issue 或 Pull Request！
+
+贡献注意事项，请参考[贡献指南](./docs/CONTRIBUTING.md)
 
 ---
 

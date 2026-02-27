@@ -103,8 +103,10 @@ graph TD
 - ✓ **MCP Extension Capabilities**
   - Decoupled MCP gateway design supporting dynamic tool integration
   - Standard JSON-RPC message processing and tool lifecycle management
-  - Communication with external scripts via stdin/stdout
+  - Subprocess, HTTP, TCP communication methods
+  - sync and background two modes
   - Dynamic tool configuration without recompilation, see [MCP Function Documentation](./docs/MCP功能说明.md)
+  - Provide multiple MCP examples, see `examples` directory
 
 ### Features To Be Implemented
 
@@ -224,6 +226,8 @@ Given the open source license restrictions, the statically linked binaries distr
 ## Contributing
 
 If you're interested in embedded Rust and Linux network programming, we welcome you to submit Issues or Pull Requests!
+
+For contribution guidelines, please refer to [CONTRIBUTING.md](./docs/CONTRIBUTING.md).
 
 ---
 
