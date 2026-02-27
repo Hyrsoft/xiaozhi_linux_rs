@@ -15,12 +15,13 @@
 >**GUI 设计**：由于 Rust 暂缺成熟且开源友好的嵌入式 GUI 库，本项目**不集成 GUI 功能**，而是通过进程间通信与独立的 GUI 进程交互。这种解耦设计可根据具体设备需求灵活选择 LVGL、Qt、Slint、TUI 等图形库，不用 GUI 进程也不影响本项目的完整功能。
 
 
-
-***为什么选择 Rust？***
-
-并不是为了蹭 “**Rewrite It In Rust**” 的热度，而是是个人兴趣和练手。同时，Rust 的现代包管理、交叉编译友好性和类型安全特性，为嵌入式 Linux 设备提供了相对统一的开发体验，有助于忽略不同 SDK、工具链和内核差异带来的生态割裂，提升项目可维护性。
-
 本项目建立在[虾哥 esp32 版小智](https://github.com/78/xiaozhi-esp32)和[百问网 Linux 版小智](https://github.com/100askTeam/xiaozhi-linux)的优良设计和宝贵经验之上，向他们致敬。
+
+参考文档：
+- [音频设备配置说明](./docs/音频设备配置说明.md)
+- [MCP 功能说明](./docs/MCP功能说明.md)
+- [OTA 功能说明](./docs/OTA功能说明.md)
+- [GUI 适配说明](./docs/GUI适配说明.md)
 
 QQ群：695113129
 
@@ -99,6 +100,12 @@ graph TD
   - 设备身份持久化（Client ID、Device ID）
   - 状态机管理（空闲、聆听、处理、说话、网络错误）
 
+- ✓ **GUI 交互**
+  - 基于 UDP 的轻量级进程间通信（IPC）
+  - 实时状态同步（聆听、处理、说话、空闲等）
+  - 云端 TTS 文本播报同步
+  - 灵活的解耦架构，支持对接独立 GUI 进程，参考[GUI 适配说明](./docs/GUI适配说明.md)
+
 - ✓ **配置系统**
   - TOML 文件配置加载
   - 运行时参数持久化
@@ -109,6 +116,7 @@ graph TD
   - 标准 JSON-RPC 消息处理与工具生命周期管理
   - 通过 stdin/stdout 与外部脚本通信
   - 支持动态工具配置，修改后无需重新编译，参考[MCP 功能说明](./docs/MCP功能说明.md)
+  - 提供多种 MCP 示例，参考`examples`目录
 
 ### 待实现的功能
 
@@ -133,34 +141,27 @@ graph TD
 
 - **C 开发工具链** (gcc, make, pkg-config)
 
-- **嵌入式 Linux 设备的 SDK，或者制作 sysroot**（用于动态链接 libc 和 音频相关 c 库）
 
-- **动态库**：
-
-  - `libasound2-dev` / `alsa-lib-devel` (ALSA 音频库)
-  - `libopus-dev` / `opus-devel` (Opus 编解码库)  
-  - `libspeexdsp-dev` / `speexdsp-devel` (SpeexDSP 处理库)
-
-
-### 已验证的目标设备（开发板）
+### 已验证的设备
 
 > 运行该项目，需要目标设备有音频输入和输出功能
 
 - **armv7-unknow-linux-uclibceabihf**
-  - [Luckfox pico 系列](https://wiki.luckfox.com/zh/Luckfox-Pico-RV1106/)（Rockchip RV1106）
-  - [Echo-Mate 桌面机器人](https://github.com/No-Chicken/Echo-Mate) （Rockchip RV1106）
+  - [Luckfox pico 系列](https://wiki.luckfox.com/zh/Luckfox-Pico-RV1106/)（Rockchip RV1106, Buildroot, I2S Sound Card）
+  - [Echo-Mate 桌面机器人](https://github.com/No-Chicken/Echo-Mate) （Rockchip RV1106, Buildroot, I2S Sound Card）
 - **armv7-unknow-linux-gnueabihf**
-  - [Luckfox Lyra 系列](https://wiki.luckfox.com/zh/Luckfox-Lyra/Introduction) （Rockchip RK3506）
+  - [Luckfox Lyra 系列](https://wiki.luckfox.com/zh/Luckfox-Lyra/Introduction) （Rockchip RK3506, Buildroot, USB Sound Card）
 - **aarch64-unknown-linux-gnu**
-  - [Dshanpi-A1](https://wiki.dshanpi.org/docs/DshanPi-A1/intro/) (Rockchip RK3576)
+  - [Dshanpi-A1](https://wiki.dshanpi.org/docs/DshanPi-A1/intro/) (Rockchip RK3576, Armbian, Both I2S and USB Sound Card)
+  - 红米手机2 （Qualcomm Snapdragon 410, Armbian, I2S Sound Card）
+  - N1 盒子 （Amlogic S905D, Armbian, USB Sound Card）
 - **x86_64-unknown-linux-gnu**
   - 安装了Arch Linux 的笔记本电脑
 
 其他目标平台的 Linux 设备（包括x86虚拟机）暂未进行验证，理论上都支持，具体交叉编译流程参考 [Rust Book](https://doc.rust-lang.org/beta/rustc/platform-support.html) 和 [RV1106 的编译脚本](./boards/rv1106_uclibceabihf/armv7_uclibc_build.sh)。
 
-支持基于 musl 的完全静态链接，可从release中下载编译好的二进制，具体编译步骤参考 scripts 中的脚本。
 
-**欢迎进行测试和提交 Pull Request**（scripts 中的编译脚本和 README 的当前部分）
+**欢迎进行测试和提交 Pull Request**（scripts 中的编译脚本、 README 的当前部分，以及`examples`目录中的示例代码）
 
 ---
 

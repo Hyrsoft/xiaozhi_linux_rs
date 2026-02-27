@@ -142,20 +142,20 @@ graph TD
 > Running this project requires the target device to have audio input and output capabilities.
 
 - **armv7-unknow-linux-uclibceabihf**
-  - [Luckfox Pico series](https://wiki.luckfox.com/en/Luckfox-Pico-RV1106/) (Rockchip RV1106)
-  - [Echo-Mate Desktop Robot](https://github.com/No-Chicken/Echo-Mate) (Rockchip RV1106)
+  - [Luckfox Pico series](https://wiki.luckfox.com/en/Luckfox-Pico-RV1106/) (Rockchip RV1106, Buildroot, I2S Sound Card)
+  - [Echo-Mate Desktop Robot](https://github.com/No-Chicken/Echo-Mate) (Rockchip RV1106, Buildroot, I2S Sound Card)
 - **armv7-unknow-linux-gnueabihf**
-  - [Luckfox Lyra series](https://wiki.luckfox.com/en/Luckfox-Lyra/Introduction) (Rockchip RK3506)
+  - [Luckfox Lyra series](https://wiki.luckfox.com/en/Luckfox-Lyra/Introduction) (Rockchip RK3506, Buildroot, USB Sound Card)
 - **aarch64-unknown-linux-gnu**
-  - [Dshanpi-A1](https://wiki.dshanpi.org/docs/DshanPi-A1/intro/) (Rockchip RK3576)
+  - [Dshanpi-A1](https://wiki.dshanpi.org/docs/DshanPi-A1/intro/) (Rockchip RK3576, Armbian, Both I2S and USB Sound Card)
+  - Redmi 2 (Qualcomm Snapdragon 410, Armbian, I2S Sound Card)
+  - N1 Box (Amlogic S905D, Armbian, USB Sound Card)
 - **x86_64-unknown-linux-gnu**
   - Laptop with Arch Linux installed
 
 Other Linux devices on different target platforms (including x86 virtual machines) have not been verified yet, but are theoretically supported. For specific cross-compilation procedures, refer to [Rust Book](https://doc.rust-lang.org/beta/rustc/platform-support.html) and [RV1106 build script](./boards/rv1106_uclibceabihf/armv7_uclibc_build.sh).
 
-Fully static linking based on musl is supported. Prebuilt binaries can be downloaded from Releases. For build steps, refer to the scripts in the scripts directory.
-
-**Testing and Pull Requests are welcome** (for build scripts in scripts and current sections of README).
+**Testing and Pull Requests are welcome** (for build scripts in scripts, current sections of README, and sample code in the `examples` directory).
 
 ---
 
