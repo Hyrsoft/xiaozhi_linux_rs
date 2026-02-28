@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::process::Command;
 use std::process::Stdio;
+use tokio::sync::broadcast;
 
 pub struct CoreController {
     state: SystemState,
@@ -18,6 +19,7 @@ pub struct CoreController {
     net_tx: mpsc::Sender<NetCommand>,
     audio_bridge: Arc<AudioBridge>,
     gui_bridge: Arc<GuiBridge>,
+    state_tx: broadcast::Sender<SystemState>,
 }
 
 impl CoreController {
@@ -27,6 +29,7 @@ impl CoreController {
         audio_bridge: Arc<AudioBridge>,
         gui_bridge: Arc<GuiBridge>,
     ) -> Self {
+        let (state_tx, _) = broadcast::channel(100);
         Self {
             state: SystemState::Idle,
             current_session_id: None,
@@ -35,7 +38,19 @@ impl CoreController {
             net_tx,
             audio_bridge,
             gui_bridge,
+            state_tx,
         }
+    }
+
+    /// 订阅 SystemState 广播
+    pub fn subscribe(&self) -> broadcast::Receiver<SystemState> {
+        self.state_tx.subscribe()
+    }
+
+    /// 广播状态变化
+    fn broadcast_state(&self) {
+        log::info!("[State Broadcast] State changed to: {:?}", self.state);
+        let _ = self.state_tx.send(self.state);
     }
 
     // 处理来自 NetLink 的事件
@@ -52,6 +67,7 @@ impl CoreController {
             NetEvent::Disconnected => {
                 log::info!("WebSocket Disconnected");
                 self.state = SystemState::NetworkError;
+                self.broadcast_state();
                 if let Err(e) = self.gui_bridge.send_message(r#"{"state": 4}"#).await {
                     log::error!("Failed to send to GUI: {}", e);
                 }
@@ -136,6 +152,7 @@ impl CoreController {
                     if state == "start" || state == "sentence_start" {
                         self.should_mute_mic = true;
                         self.state = SystemState::Speaking;
+                        self.broadcast_state();
                         log::info!("TTS Started (state={}), muting mic for AEC, sending state 6 to GUI", state);
                         if let Err(e) = self.gui_bridge.send_message(r#"{"state": 6}"#).await {
                             log::error!("Failed to send state 6 to GUI: {}", e);
@@ -143,6 +160,7 @@ impl CoreController {
                     } else if state == "stop" || state == "sentence_end" {
                         self.should_mute_mic = false;
                         self.state = SystemState::Idle;
+                        self.broadcast_state();
                         log::info!("TTS Stopped (state={}), unmuting mic, sending state 3 to GUI", state);
                         if let Err(e) = self.gui_bridge.send_message(r#"{"state": 3}"#).await {
                             log::error!("Failed to send state 3 to GUI: {}", e);
@@ -176,6 +194,7 @@ impl CoreController {
     async fn process_server_audio(&mut self, data: Vec<u8>) {
         if self.state != SystemState::Speaking {
             self.state = SystemState::Speaking;
+            self.broadcast_state();
             if let Err(e) = self.gui_bridge.send_message(r#"{"state": 6}"#).await {
                 log::error!("Failed to send to GUI: {}", e);
             }
@@ -206,6 +225,7 @@ impl CoreController {
                 }
                 if self.state != SystemState::Listening {
                     self.state = SystemState::Listening;
+                    self.broadcast_state();
                     if let Err(e) = self.gui_bridge.send_message(r#"{"state": 5}"#).await {
                         log::error!("Failed to send to GUI: {}", e);
                     }
