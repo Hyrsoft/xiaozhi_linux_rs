@@ -46,15 +46,42 @@ THIRD_PARTY="$PROJECT_ROOT/third_party"
 TARGET_DIR="$THIRD_PARTY/$TARGET"
 mkdir -p "$TARGET_DIR"
 
-# --- 1A. 下载 GNU 交叉编译工具链 ---
-TOOLCHAIN_NAME="gcc-arm-8.3-2019.02-x86_64-aarch64-linux-gnu"
-TOOLCHAIN_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
+# --- 1A. 工具链配置 ---
+# 支持通过环境变量自定义工具链和编译参数：
+#   CROSS_TOOLCHAIN_DIR   - 自定义工具链根目录（需包含 bin/${CROSS_PREFIX}-gcc 等）
+#   CROSS_COMPILER_PREFIX - 自定义编译器前缀（默认: aarch64-linux-gnu）
+#   EXTRA_CFLAGS          - 额外 C 编译参数（追加到默认 CFLAGS）
+#   EXTRA_RUSTFLAGS       - 额外 Rust 链接参数（追加到默认 RUSTFLAGS）
 
-TOOLCHAIN_DIR=$(download_and_setup_toolchain \
-    "$TARGET_DIR" \
-    "$TOOLCHAIN_NAME" \
-    "$CROSS_PREFIX" \
-    "$TOOLCHAIN_URL")
+# 覆盖交叉编译前缀（如果指定）
+if [ -n "$CROSS_COMPILER_PREFIX" ]; then
+    CROSS_PREFIX="$CROSS_COMPILER_PREFIX"
+    echo "使用自定义编译器前缀: $CROSS_PREFIX"
+fi
+
+if [ -n "$CROSS_TOOLCHAIN_DIR" ]; then
+    # === 使用用户指定的工具链 ===
+    echo "=== 使用自定义工具链: $CROSS_TOOLCHAIN_DIR ==="
+    TOOLCHAIN_DIR="$CROSS_TOOLCHAIN_DIR"
+
+    # 验证工具链有效性
+    if [ ! -x "$TOOLCHAIN_DIR/bin/${CROSS_PREFIX}-gcc" ]; then
+        echo "错误：自定义工具链无效！"
+        echo "  未找到可执行文件: $TOOLCHAIN_DIR/bin/${CROSS_PREFIX}-gcc"
+        echo "  请检查 CROSS_TOOLCHAIN_DIR 和 CROSS_COMPILER_PREFIX 是否正确。"
+        exit 1
+    fi
+else
+    # === 默认逻辑：自动下载工具链 ===
+    TOOLCHAIN_NAME="gcc-arm-8.3-2019.02-x86_64-aarch64-linux-gnu"
+    TOOLCHAIN_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
+
+    TOOLCHAIN_DIR=$(download_and_setup_toolchain \
+        "$TARGET_DIR" \
+        "$TOOLCHAIN_NAME" \
+        "$CROSS_PREFIX" \
+        "$TOOLCHAIN_URL")
+fi
 
 # 设置交叉编译工具路径
 CROSS_GCC="$TOOLCHAIN_DIR/bin/${CROSS_PREFIX}-gcc"
@@ -102,8 +129,8 @@ export AR="$CROSS_AR"
 export RANLIB="$CROSS_RANLIB"
 export STRIP="$CROSS_STRIP"
 # GNU 目标编译为 PIE，静态库必须使用 -fPIC 才能链接进 PIE 二进制
-export CFLAGS="-fPIC"
-export CXXFLAGS="-fPIC"
+export CFLAGS="-fPIC${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
+export CXXFLAGS="-fPIC${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
 
 # --- 2A. 编译 alsa-lib（共享库，仅用于链接时符号解析）---
 build_alsa_shared "$TARGET_DIR" "$BUILD_DIR" "$CROSS_PREFIX" "$ALSA_VERSION" "$NPROC"
@@ -128,13 +155,13 @@ export AR_aarch64_unknown_linux_gnu="$CROSS_AR"
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="$CROSS_GCC"
 
 # 告诉 Rust cc crate 编译 C 源码时使用 -fPIC（PIE 二进制必需）
-export CFLAGS_aarch64_unknown_linux_gnu="-fPIC"
+export CFLAGS_aarch64_unknown_linux_gnu="-fPIC${EXTRA_CFLAGS:+ $EXTRA_CFLAGS}"
 
 # 混合链接：不使用 +crt-static，保持 libc/libdl 动态链接
 # GCC 自带 sysroot 提供 libpthread/libdl/libm/libc 等系统库，无需 --sysroot
 # -L 指向 ALSA 共享库目录
 # --no-as-needed：确保 -lpthread -ldl -lm 不会被 Rust 注入的 --as-needed 丢弃
-export RUSTFLAGS="-C link-arg=-L$ALSA_SHARED_LIBDIR -C link-arg=-Wl,--no-as-needed -C link-arg=-ldl -C link-arg=-lpthread -C link-arg=-lm"
+export RUSTFLAGS="-C link-arg=-L$ALSA_SHARED_LIBDIR -C link-arg=-Wl,--no-as-needed -C link-arg=-ldl -C link-arg=-lpthread -C link-arg=-lm${EXTRA_RUSTFLAGS:+ $EXTRA_RUSTFLAGS}"
 
 # 告诉 audiopus_sys 使用静态链接 opus
 export LIBOPUS_STATIC=1

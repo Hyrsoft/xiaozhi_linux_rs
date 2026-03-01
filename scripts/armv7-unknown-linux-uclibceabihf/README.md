@@ -41,6 +41,28 @@ bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
 - `alsa-shared/` — ALSA 共享库（仅链接时使用）
 - `build/` — C 依赖库源码与编译中间产物
 
+### 自定义工具链与编译参数
+
+脚本支持通过环境变量自定义工具链和编译参数。未设置时按默认逻辑自动下载；设置后会验证工具链有效性，无效则报错退出。
+
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `CROSS_TOOLCHAIN_DIR` | 工具链根目录（需包含 `bin/<prefix>-gcc` 等） | 自动下载 |
+| `CROSS_COMPILER_PREFIX` | 编译器前缀 | `arm-rockchip830-linux-uclibcgnueabihf` |
+| `EXTRA_CFLAGS` | 额外 C 编译参数（追加到 `-fPIC` 之后） | 无 |
+| `EXTRA_RUSTFLAGS` | 额外 Rust 链接参数（追加到默认 RUSTFLAGS 之后） | 无 |
+
+```bash
+# 示例：使用 RV1106 BSP 自带的工具链
+CROSS_TOOLCHAIN_DIR=/opt/rv1106-sdk/tools/linux/toolchain/arm-rockchip830-linux-uclibcgnueabihf \
+  bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
+
+# 示例：使用不同前缀的 uClibc 工具链
+CROSS_TOOLCHAIN_DIR=/opt/my-uclibc-toolchain \
+CROSS_COMPILER_PREFIX=arm-linux-uclibcgnueabihf \
+  bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
+```
+
 ### uClibc 特别说明
 
 uClibc 缺少 `getauxval` 函数的实现，因此在链接阶段会找不到函数定义。

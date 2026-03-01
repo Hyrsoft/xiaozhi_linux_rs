@@ -217,6 +217,38 @@ rustup component add rust-src --toolchain nightly
         ld-uClibc.so.1 => /lib/ld-uClibc.so.0 (0xa6efc000)
 ```
 
+#### 自定义工具链与编译参数
+
+所有交叉编译脚本均支持通过环境变量自定义工具链和编译参数。未设置时自动下载默认工具链；设置后会验证工具链有效性，无效则报错退出。
+
+| 环境变量 | 说明 |
+|---|---|
+| `CROSS_TOOLCHAIN_DIR` | 自定义工具链根目录（需包含 `bin/<prefix>-gcc` 等） |
+| `CROSS_COMPILER_PREFIX` | 自定义编译器前缀（覆盖脚本默认值） |
+| `EXTRA_CFLAGS` | 额外 C 编译参数（追加到默认 CFLAGS） |
+| `EXTRA_RUSTFLAGS` | 额外 Rust 链接参数（追加到默认 RUSTFLAGS） |
+
+```bash
+# 示例：使用自定义 aarch64 工具链
+CROSS_TOOLCHAIN_DIR=/opt/my-aarch64-toolchain \
+  bash scripts/aarch64-unknown-linux-gnu/build.sh
+
+# 示例：为 RISC-V 指定 BSP 专有工具链和前缀
+CROSS_TOOLCHAIN_DIR=/opt/riscv-bsp-toolchain \
+CROSS_COMPILER_PREFIX=riscv64-linux-gnu \
+  bash scripts/riscv64gc-unknown-linux-gnu/build.sh
+
+# 示例：追加自定义编译参数
+EXTRA_CFLAGS="-mcpu=cortex-a53" \
+  bash scripts/aarch64-unknown-linux-gnu/build.sh
+```
+
+各 Target 的详细说明参见对应目录下的 README：
+- [`scripts/aarch64-unknown-linux-gnu/`](./scripts/aarch64-unknown-linux-gnu/README.md)
+- [`scripts/armv7-unknown-linux-gnueabihf/`](./scripts/armv7-unknown-linux-gnueabihf/README.md)
+- [`scripts/armv7-unknown-linux-uclibceabihf/`](./scripts/armv7-unknown-linux-uclibceabihf/README.md)
+- [`scripts/riscv64gc-unknown-linux-gnu/`](./scripts/riscv64gc-unknown-linux-gnu/README.md)
+
 ---
 
 ## 开源协议与分发说明

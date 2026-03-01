@@ -210,6 +210,38 @@ rustup component add rust-src --toolchain nightly
         ld-uClibc.so.1 => /lib/ld-uClibc.so.0 (0xa6efc000)
 ```
 
+#### Custom Toolchain and Build Parameters
+
+All cross-compilation scripts support customizing the toolchain and build parameters via environment variables. When not set, the default toolchain is downloaded automatically; when set, the toolchain is validated and the script exits with an error if invalid.
+
+| Environment Variable | Description |
+|---|---|
+| `CROSS_TOOLCHAIN_DIR` | Custom toolchain root directory (must contain `bin/<prefix>-gcc`, etc.) |
+| `CROSS_COMPILER_PREFIX` | Custom compiler prefix (overrides script default) |
+| `EXTRA_CFLAGS` | Additional C compilation flags (appended to default CFLAGS) |
+| `EXTRA_RUSTFLAGS` | Additional Rust linker flags (appended to default RUSTFLAGS) |
+
+```bash
+# Example: Use a custom aarch64 toolchain
+CROSS_TOOLCHAIN_DIR=/opt/my-aarch64-toolchain \
+  bash scripts/aarch64-unknown-linux-gnu/build.sh
+
+# Example: Specify a BSP-provided RISC-V toolchain with a custom prefix
+CROSS_TOOLCHAIN_DIR=/opt/riscv-bsp-toolchain \
+CROSS_COMPILER_PREFIX=riscv64-linux-gnu \
+  bash scripts/riscv64gc-unknown-linux-gnu/build.sh
+
+# Example: Append custom build flags
+EXTRA_CFLAGS="-mcpu=cortex-a53" \
+  bash scripts/aarch64-unknown-linux-gnu/build.sh
+```
+
+For target-specific details, see the README in each script directory:
+- [`scripts/aarch64-unknown-linux-gnu/`](./scripts/aarch64-unknown-linux-gnu/README.md)
+- [`scripts/armv7-unknown-linux-gnueabihf/`](./scripts/armv7-unknown-linux-gnueabihf/README.md)
+- [`scripts/armv7-unknown-linux-uclibceabihf/`](./scripts/armv7-unknown-linux-uclibceabihf/README.md)
+- [`scripts/riscv64gc-unknown-linux-gnu/`](./scripts/riscv64gc-unknown-linux-gnu/README.md)
+
 ---
 
 ## Open Source License and Distribution Notice

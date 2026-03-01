@@ -31,13 +31,35 @@ bash scripts/riscv64gc-unknown-linux-gnu/build.sh
 # 成功后产物输出至: target/riscv64gc-unknown-linux-gnu/release/xiaozhi_linux_rs
 ```
 
+### 自定义工具链与编译参数
+
+由于 RISC-V 生态工具链差异明显，脚本特别支持通过环境变量指定自定义工具链。未设置时按默认逻辑自动下载；设置后会验证工具链有效性，无效则报错退出。
+
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `CROSS_TOOLCHAIN_DIR` | 工具链根目录（需包含 `bin/<prefix>-gcc` 等） | 自动下载 |
+| `CROSS_COMPILER_PREFIX` | 编译器前缀 | `riscv64-unknown-linux-gnu` |
+| `EXTRA_CFLAGS` | 额外 C 编译参数（追加到 `-fPIC` 之后） | 无 |
+| `EXTRA_RUSTFLAGS` | 额外 Rust 链接参数（追加到默认 RUSTFLAGS 之后） | 无 |
+
+```bash
+# 示例：使用全志/赛昕 BSP 提供的专有工具链
+CROSS_TOOLCHAIN_DIR=/opt/riscv-bsp-toolchain \
+CROSS_COMPILER_PREFIX=riscv64-linux-gnu \
+  bash scripts/riscv64gc-unknown-linux-gnu/build.sh
+
+# 示例：追加 RISC-V 特定的编译参数
+EXTRA_CFLAGS="-march=rv64gc -mabi=lp64d" \
+  bash scripts/riscv64gc-unknown-linux-gnu/build.sh
+```
+
 ### 工具链与构建细节说明
 
 本脚本默认使用定制的 RISC-V GCC 工具链。
 
 > **链接器警告说明**：由于较老版本的 GCC 工具链 (如 GNU ld 2.3x) 不识别 Rust 较新版本注入的一些新 RISC-V Z 扩展属性，这将会抛出属性合并警告。**脚本已经默认启用了 `-Wl,--no-warn-mismatch` 屏蔽该误报**，这通常不影响运行时的正确性。
 >
-> 如果您的 RISC-V 系统提供的 GLIBC 版本甚至比编译器自带预期的还要老，或指令集无法兼容本编译产物（通常表现为 `Illegal instruction` 或类似找不到 GLIBC_XXX 符号），您可能需要修改 `build.sh` 替换为硬件厂商（BSP）原生提供的专有 GCC 工具链重新执行构建。
+> 如果您的 RISC-V 系统提供的 GLIBC 版本甚至比编译器自带预期的还要老，或指令集无法兼容本编译产物（通常表现为 `Illegal instruction` 或类似找不到 GLIBC_XXX 符号），可通过 `CROSS_TOOLCHAIN_DIR` 指定硬件厂商（BSP）原生提供的专有 GCC 工具链重新执行构建。
 
 ### 验证构建结果
 

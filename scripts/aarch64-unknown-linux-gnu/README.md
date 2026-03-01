@@ -29,6 +29,27 @@ bash scripts/aarch64-unknown-linux-gnu/build.sh
 
 > **GLIBC 版本兼容性**：编译时工具链的 GLIBC 版本决定了二进制能运行的最低系统版本。使用 GLIBC 2.17 (CentOS 7) 或 2.27 (Ubuntu 18.04) 的工具链可获得最广泛的兼容性。
 
+### 自定义工具链与编译参数
+
+脚本支持通过环境变量自定义工具链和编译参数。未设置时按默认逻辑自动下载；设置后会验证工具链有效性，无效则报错退出。
+
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `CROSS_TOOLCHAIN_DIR` | 工具链根目录（需包含 `bin/<prefix>-gcc` 等） | 自动下载 |
+| `CROSS_COMPILER_PREFIX` | 编译器前缀 | `aarch64-linux-gnu` |
+| `EXTRA_CFLAGS` | 额外 C 编译参数（追加到 `-fPIC` 之后） | 无 |
+| `EXTRA_RUSTFLAGS` | 额外 Rust 链接参数（追加到默认 RUSTFLAGS 之后） | 无 |
+
+```bash
+# 示例：使用 Linaro 工具链编译
+CROSS_TOOLCHAIN_DIR=/opt/gcc-linaro-7.5-aarch64-linux-gnu \
+  bash scripts/aarch64-unknown-linux-gnu/build.sh
+
+# 示例：追加自定义 CFLAGS
+EXTRA_CFLAGS="-mcpu=cortex-a53" \
+  bash scripts/aarch64-unknown-linux-gnu/build.sh
+```
+
 ### 验证构建结果
 
 ```bash

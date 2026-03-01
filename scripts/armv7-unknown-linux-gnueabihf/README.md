@@ -29,6 +29,28 @@ bash scripts/armv7-unknown-linux-gnueabihf/build.sh
 
 > **GLIBC 版本兼容性**：编译时工具链的 GLIBC 版本决定了二进制能运行的最低系统版本。GCC 8.3 工具链提供较低的 GLIBC 版本，兼容性较好。
 
+### 自定义工具链与编译参数
+
+脚本支持通过环境变量自定义工具链和编译参数。未设置时按默认逻辑自动下载；设置后会验证工具链有效性，无效则报错退出。
+
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `CROSS_TOOLCHAIN_DIR` | 工具链根目录（需包含 `bin/<prefix>-gcc` 等） | 自动下载 |
+| `CROSS_COMPILER_PREFIX` | 编译器前缀 | `arm-linux-gnueabihf` |
+| `EXTRA_CFLAGS` | 额外 C 编译参数（追加到 `-fPIC` 之后） | 无 |
+| `EXTRA_RUSTFLAGS` | 额外 Rust 链接参数（追加到默认 RUSTFLAGS 之后） | 无 |
+
+```bash
+# 示例：使用自己的 ARM GCC 工具链
+CROSS_TOOLCHAIN_DIR=/opt/my-arm-gcc \
+  bash scripts/armv7-unknown-linux-gnueabihf/build.sh
+
+# 示例：追加自定义 CFLAGS 和 RUSTFLAGS
+EXTRA_CFLAGS="-mfpu=neon-vfpv4" \
+EXTRA_RUSTFLAGS="-C link-arg=-Wl,--strip-all" \
+  bash scripts/armv7-unknown-linux-gnueabihf/build.sh
+```
+
 ### 验证构建结果
 
 ```bash
