@@ -204,6 +204,8 @@ fn build_or_probe_c_deps(target: &str) {
             config.config_option("host", Some("arm-rockchip830-linux-uclibcgnueabihf"));
         } else if target.contains("aarch64-linux-gnu") || target == "aarch64-unknown-linux-gnu" {
             config.config_option("host", Some("aarch64-linux-gnu"));
+        } else if target == "riscv64gc-unknown-linux-gnu" {
+            config.config_option("host", Some("riscv64-unknown-linux-gnu"));
         }
             
         let dst = config.build();
@@ -231,6 +233,8 @@ fn build_or_probe_c_deps(target: &str) {
             config.config_option("host", Some("arm-rockchip830-linux-uclibcgnueabihf"));
         } else if target.contains("aarch64-linux-gnu") || target == "aarch64-unknown-linux-gnu" {
             config.config_option("host", Some("aarch64-linux-gnu"));
+        } else if target == "riscv64gc-unknown-linux-gnu" {
+            config.config_option("host", Some("riscv64-unknown-linux-gnu"));
         }
         
         let dst = config.build();

@@ -12,6 +12,7 @@ on:
           - armv7-unknown-linux-uclibceabihf
           - armv7-unknown-linux-gnueabihf
           - aarch64-unknown-linux-gnu
+          - riscv64gc-unknown-linux-gnu
         default: 'all'
       version:
         description: '版本标签 (例如: v1.0.0)'
@@ -109,9 +110,39 @@ jobs:
           name: xiaozhi_linux_rs-armv7-gnueabihf
           path: target/armv7-unknown-linux-gnueabihf/release/xiaozhi_linux_rs
 
+  build-riscv64-gnu:
+    if: ${{ github.event.inputs.target == 'all' || github.event.inputs.target == 'riscv64gc-unknown-linux-gnu' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv64gc-unknown-linux-gnu
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y wget make pkg-config libasound2-dev
+
+      - name: Cache toolchain & C libraries
+        uses: actions/cache@v4
+        with:
+          path: third_party/riscv64gc-unknown-linux-gnu
+          key: gnu-riscv64-toolchain-v2
+
+      - name: Build (riscv64gc-unknown-linux-gnu)
+        run: bash scripts/riscv64gc-unknown-linux-gnu/build.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiaozhi_linux_rs-riscv64-gnu
+          path: target/riscv64gc-unknown-linux-gnu/release/xiaozhi_linux_rs
+
   release:
     if: ${{ always() && !cancelled() }}
-    needs: [build-armv7-uclibc, build-armv7-gnu, build-aarch64-gnu]
+    needs: [build-armv7-uclibc, build-armv7-gnu, build-aarch64-gnu, build-riscv64-gnu]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -139,6 +170,10 @@ jobs:
           if [ -f artifacts/xiaozhi_linux_rs-armv7-gnueabihf/xiaozhi_linux_rs ]; then
             cp artifacts/xiaozhi_linux_rs-armv7-gnueabihf/xiaozhi_linux_rs release/xiaozhi_linux_rs-armv7-gnueabihf
             chmod +x release/xiaozhi_linux_rs-armv7-gnueabihf
+          fi
+          if [ -f artifacts/xiaozhi_linux_rs-riscv64-gnu/xiaozhi_linux_rs ]; then
+            cp artifacts/xiaozhi_linux_rs-riscv64-gnu/xiaozhi_linux_rs release/xiaozhi_linux_rs-riscv64-gnu
+            chmod +x release/xiaozhi_linux_rs-riscv64-gnu
           fi
           ls -lh release/
 
