@@ -1,62 +1,25 @@
 {
-  "capture_device": "default",
-  "playback_device": "default",
-  "stream_format": "opus",
-  "playback_sample_rate": 48000,
-  "playback_channels": 2,
-  "playback_period_size": 960,
-  "gui_local_port": 5678,
-  "gui_remote_port": 5679,
-  "gui_local_ip": "0.0.0.0",
-  "gui_remote_ip": "127.0.0.1",
-  "gui_buffer_size": 4096,
-  "ws_url": "wss://api.tenclass.net/xiaozhi/v1/",
-  "ota_url": "https://api.tenclass.net/xiaozhi/ota/",
-  "ws_token": "test-token",
-  "device_id": "aa:84:7a:7e:0e:f6",
-  "client_id": "249d88db-22e9-4188-8a52-af140bec72b5",
-  "hello_format": "opus",
-  "hello_sample_rate": 24000,
-  "hello_channels": 1,
-  "hello_frame_duration": 20,
-  "enable_tts_display": true,
   "mcp": {
     "enabled": true,
     "tools": [
       {
-        "name": "get_system_status",
-        "description": "获取当前设备的系统状态，包括 CPU 负载、内存使用率、磁盘空间和运行时间。当用户询问系统压力、运行多久、负载情况时调用。",
-        "input_schema": {
-          "properties": {},
-          "type": "object"
-        },
-        "mode": "sync",
-        "timeout_ms": 5000,
-        "type": "subprocess",
-        "executable": "./system_status.sh",
-        "args": [],
-        "notify": {
-          "type": "disabled"
-        }
-      },
-      {
         "name": "control_robot",
-        "description": "控制机器人移动，可以前进、后退、左转、右转或停止。",
-        "type": "subprocess",
-        "executable": "./robot_control.py",
-        "mode": "sync",
-        "timeout_ms": 5000,
+        "description": "控制机器人移动，支持前进、后退、左转、右转、停止",
         "input_schema": {
           "type": "object",
           "properties": {
             "direction": {
               "type": "string",
-              "enum": ["forward", "backward", "left", "right", "stop"],
+              "enum": [ "forward", "back", "left", "right", "stop" ],
               "description": "移动方向"
             }
           },
-          "required": ["direction"]
-        }
+          "required": [ "direction" ]
+        },
+        "type": "subprocess",
+        "executable": "./robot_control.py",
+        "mode": "sync",
+        "timeout_ms": 5000
       }
     ]
   }
