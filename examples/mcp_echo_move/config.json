@@ -1,0 +1,26 @@
+{
+  "mcp": {
+    "enabled": true,
+    "tools": [
+      {
+        "name": "control_robot",
+        "description": "控制机器人移动，支持前进、后退、左转、右转、停止",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "direction": {
+              "type": "string",
+              "enum": [ "forward", "back", "left", "right", "stop" ],
+              "description": "移动方向"
+            }
+          },
+          "required": [ "direction" ]
+        },
+        "type": "subprocess",
+        "executable": "./robot_control.py",
+        "mode": "sync",
+        "timeout_ms": 5000
+      }
+    ]
+  }
+}
