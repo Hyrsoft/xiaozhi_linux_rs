@@ -21,7 +21,7 @@ impl AudioBridge {
             capture_device: config.capture_device.to_string(),
             playback_device: config.playback_device.to_string(),
             sample_rate: config.hello_sample_rate,
-            channels: 2, // ALSA device typically 2 channels
+            channels: 2, // capture device typically 2 channels
             opus_sample_rate: config.hello_sample_rate,
             opus_channels: config.hello_channels as u32,
             opus_bitrate: 64000,

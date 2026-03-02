@@ -1,17 +1,21 @@
+//! Playback worker thread: receives encoded audio packets, decodes them,
+//! and writes the resulting PCM into the CPAL ring buffer for output.
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 use anyhow::Result;
 
-use super::alsa_device;
+use super::cpal_device::RbProducer;
 use super::opus_codec::OpusDecoder;
 use super::stream_decoder::StreamDecoder;
 use super::audio_system::AudioConfig;
+use ringbuf::traits::Producer;
 
 /// Factory function: create a decoder based on the configured playback format.
 fn create_decoder(
     config: &AudioConfig,
-    alsa_rate: u32,
-    alsa_channels: u32,
+    output_rate: u32,
+    output_channels: u32,
 ) -> Result<Box<dyn StreamDecoder>> {
     match config.stream_format.as_str() {
         "opus" => {
@@ -19,8 +23,8 @@ fn create_decoder(
                 config.opus_sample_rate,
                 config.opus_channels,
                 config.decode_frame_duration_ms,
-                alsa_rate,
-                alsa_channels,
+                output_rate,
+                output_channels,
             )?;
             Ok(Box::new(decoder))
         }
@@ -28,39 +32,26 @@ fn create_decoder(
     }
 }
 
+/// Playback worker – runs on a dedicated OS thread.
+///
+/// Receives encoded packets from `opus_rx`, decodes them, and pushes
+/// interleaved i16 PCM into the ring buffer consumed by the CPAL output callback.
 pub fn play_thread(
     config: &AudioConfig,
+    actual_rate: u32,
+    actual_channels: u32,
+    mut output_producer: RbProducer,
     mut opus_rx: mpsc::Receiver<Vec<u8>>,
     running: &AtomicBool,
 ) -> Result<()> {
-    // 1. Open ALSA playback device with configurable sample rate, channels, and period size
-    let period_size_opt = if config.playback_period_size > 0 {
-        Some(config.playback_period_size)
-    } else {
-        None
-    };
-    let (pcm, params) = alsa_device::open_playback(
-        &config.playback_device,
-        config.playback_sample_rate,
-        config.playback_channels,
-        period_size_opt,
-    )?;
-
-    let actual_rate = params.sample_rate;
-    let actual_channels = params.channels;
-    let _period_size = params.period_size;
-
-    // 2. Initialize decoder via factory pattern
+    // Initialize decoder with CPAL-negotiated output parameters
     let mut decoder = create_decoder(config, actual_rate, actual_channels)?;
 
-    let io = pcm.io_i16()?;
-
     log::info!(
-        "Playback started: stream_format={}, rate={}, ch={}, period={}",
+        "Playback started: stream_format={}, rate={}, ch={}",
         config.stream_format,
         actual_rate,
         actual_channels,
-        _period_size,
     );
 
     while running.load(Ordering::Relaxed) {
@@ -72,42 +63,15 @@ pub fn play_thread(
                         if pcm_data.is_empty() {
                             continue;
                         }
-                        // Write decoded PCM to ALSA with retry loop to handle
-                        // short writes and XRUN recovery without losing frames.
-                        let total_frames = pcm_data.len() / actual_channels as usize;
-                        let mut frames_written = 0;
-                        let mut retry_count = 0u32;
-
-                        while frames_written < total_frames {
-                            let offset = frames_written * actual_channels as usize;
-                            match io.writei(&pcm_data[offset..]) {
-                                Ok(n) => {
-                                    frames_written += n;
-                                    retry_count = 0; // 成功写入，重置重试计数
-                                }
-                                Err(e) => {
-                                    log::warn!("ALSA XRUN or error: {}, recovering...", e);
-                                    retry_count += 1;
-
-                                    // 触发 ALSA 硬件恢复状态机
-                                    if let Err(e2) = pcm.prepare() {
-                                        log::error!(
-                                            "Failed to recover PCM playback: {}",
-                                            e2
-                                        );
-                                        break;
-                                    }
-
-                                    // 熔断器：底层持续跟不上写入速度时，丢弃剩余帧防止死循环
-                                    if retry_count >= 3 {
-                                        log::error!(
-                                            "Max recovery retries ({}) reached. Dropping {} unwritten frames to break dead-loop.",
-                                            retry_count,
-                                            total_frames - frames_written
-                                        );
-                                        break;
-                                    }
-                                }
+                        // Push decoded PCM into the ring buffer.
+                        // If the buffer is full, we busy-wait briefly so the CPAL
+                        // output callback has time to drain it.
+                        let mut written = 0;
+                        while written < pcm_data.len() && running.load(Ordering::Relaxed) {
+                            let n = output_producer.push_slice(&pcm_data[written..]);
+                            written += n;
+                            if written < pcm_data.len() {
+                                std::thread::sleep(std::time::Duration::from_millis(2));
                             }
                         }
                     }

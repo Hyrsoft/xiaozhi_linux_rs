@@ -1,7 +1,8 @@
-//! The main AudioSystem that manages recording and playback threads.
+//! The main AudioSystem that manages recording and playback.
 //!
-//! Uses std::thread (NOT tokio tasks) for real-time audio I/O to avoid
-//! contention with async network tasks.
+//! Uses CPAL for cross-platform audio I/O with lock-free ring buffers
+//! bridging the CPAL callback threads and dedicated OS worker threads
+//! (for Speex preprocessing, Opus encoding/decoding).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -9,20 +10,22 @@ use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 
 use anyhow::Result;
+use cpal::Stream;
 
+use super::cpal_device;
 use super::record::record_thread;
 use super::play::play_thread;
 
 /// Audio system configuration.
 #[derive(Debug, Clone)]
 pub struct AudioConfig {
-    /// ALSA capture device name (e.g. "default", "plughw:0,0")
+    /// Capture device name (e.g. "default"; platform-specific naming)
     pub capture_device: String,
-    /// ALSA playback device name
+    /// Playback device name
     pub playback_device: String,
-    /// Desired ALSA sample rate for capture (may be negotiated by hardware)
+    /// Desired sample rate for capture
     pub sample_rate: u32,
-    /// Desired ALSA channel count for capture
+    /// Desired channel count for capture
     pub channels: u32,
     /// Opus codec sample rate (typically 24000)
     pub opus_sample_rate: u32,
@@ -36,11 +39,11 @@ pub struct AudioConfig {
     pub decode_frame_duration_ms: u32,
     /// 网络下发流的编码格式: "opus", "mp3", "pcm"
     pub stream_format: String,
-    /// Desired ALSA playback sample rate
+    /// Desired playback sample rate
     pub playback_sample_rate: u32,
-    /// Desired ALSA playback channel count
+    /// Desired playback channel count
     pub playback_channels: u32,
-    /// Desired ALSA playback period size (0 = let ALSA decide)
+    /// Desired playback period (buffer) size (0 = let backend decide)
     pub playback_period_size: usize,
 }
 
@@ -64,14 +67,23 @@ impl Default for AudioConfig {
     }
 }
 
-/// The audio system manages recording and playback in dedicated OS threads.
+/// The audio system manages recording and playback.
 ///
-/// - Recording thread: ALSA capture → Speex preprocess → Opus encode → `opus_tx`
-/// - Playback thread: `opus_rx` → Opus decode → ALSA playback
+/// Architecture (per the CPAL migration design):
+///
+/// ```text
+/// CPAL input callback ──► RingBuffer ──► record_thread (Speex/Opus) ──► opus_tx
+/// opus_rx ──► play_thread (Opus decode) ──► RingBuffer ──► CPAL output callback
+/// ```
+///
+/// The `Stream` objects are held alive here; dropping them stops audio I/O.
 pub struct AudioSystem {
     running: Arc<AtomicBool>,
     record_handle: Option<JoinHandle<()>>,
     play_handle: Option<JoinHandle<()>>,
+    // CPAL streams must be kept alive – dropping them stops audio.
+    _capture_stream: Stream,
+    _playback_stream: Stream,
 }
 
 impl AudioSystem {
@@ -97,27 +109,62 @@ impl AudioSystem {
             config.opus_channels,
         );
 
+        // --- Open CPAL capture stream + ring buffer ---
+        let (capture_stream, capture_params, input_consumer) = cpal_device::open_capture(
+            &config.capture_device,
+            config.sample_rate,
+            config.channels,
+            running.clone(),
+        )?;
+
+        // --- Open CPAL playback stream + ring buffer ---
+        let (playback_stream, playback_params, output_producer) = cpal_device::open_playback(
+            &config.playback_device,
+            config.playback_sample_rate,
+            config.playback_channels,
+            config.playback_period_size,
+            running.clone(),
+        )?;
+
+        // --- Spawn recording worker thread ---
         let record_handle = {
             let running = running.clone();
             let config = config.clone();
+            let cap_rate = capture_params.sample_rate;
+            let cap_ch = capture_params.channels;
             thread::Builder::new()
                 .name("audio-record".into())
                 .spawn(move || {
-                    if let Err(e) = record_thread(&config, opus_tx, &running) {
+                    if let Err(e) = record_thread(
+                        &config,
+                        cap_rate,
+                        cap_ch,
+                        input_consumer,
+                        opus_tx,
+                        &running,
+                    ) {
                         log::error!("Recording thread error: {}", e);
                     }
                 })?
         };
 
+        // --- Spawn playback worker thread ---
         let play_handle = {
             let running = running.clone();
             let config = config.clone();
+            let play_rate = playback_params.sample_rate;
+            let play_ch = playback_params.channels;
             thread::Builder::new()
                 .name("audio-play".into())
                 .spawn(move || {
-                    // Small delay to let capture device initialize first
-                    thread::sleep(std::time::Duration::from_secs(1));
-                    if let Err(e) = play_thread(&config, opus_rx, &running) {
+                    if let Err(e) = play_thread(
+                        &config,
+                        play_rate,
+                        play_ch,
+                        output_producer,
+                        opus_rx,
+                        &running,
+                    ) {
                         log::error!("Playback thread error: {}", e);
                     }
                 })?
@@ -127,6 +174,8 @@ impl AudioSystem {
             running,
             record_handle: Some(record_handle),
             play_handle: Some(play_handle),
+            _capture_stream: capture_stream,
+            _playback_stream: playback_stream,
         })
     }
 

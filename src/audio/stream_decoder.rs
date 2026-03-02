@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 /// A trait for audio stream decoders that convert compressed audio data
-/// into interleaved i16 PCM samples ready for ALSA playback.
+/// into interleaved i16 PCM samples ready for playback.
 ///
 /// Implementations handle format-specific decoding, resampling, and
 /// channel conversion internally.

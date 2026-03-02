@@ -1,26 +1,34 @@
+//! Recording worker thread: reads PCM from the CPAL ring buffer,
+//! applies Speex preprocessing, encodes with Opus, and sends packets
+//! via the `opus_tx` channel.
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 use anyhow::Result;
 
-use super::alsa_device;
+use super::cpal_device::RbConsumer;
 use super::opus_codec::OpusEncoder;
 use super::speex::Preprocessor;
 use super::audio_system::AudioConfig;
+use ringbuf::traits::{Consumer, Observer};
 
+/// Recording worker – runs on a dedicated OS thread.
+///
+/// Instead of blocking on ALSA `readi`, it continuously drains samples
+/// from the lock-free ring buffer filled by the CPAL input callback.
 pub fn record_thread(
     config: &AudioConfig,
+    actual_rate: u32,
+    actual_channels: u32,
+    mut input_consumer: RbConsumer,
     opus_tx: mpsc::Sender<Vec<u8>>,
     running: &AtomicBool,
 ) -> Result<()> {
-    // 1. Open ALSA capture device
-    let (pcm, params) =
-        alsa_device::open_capture(&config.capture_device, config.sample_rate, config.channels)?;
+    // We use the negotiated rate/channels from CPAL rather than the config hints,
+    // since the device may have picked different values.
+    let period_size: usize = (actual_rate as usize * 20) / 1000; // ~20 ms worth of frames
 
-    let actual_rate = params.sample_rate;
-    let actual_channels = params.channels;
-    let period_size = params.period_size;
-
-    // 2. Initialize Speex preprocessors (one per channel for independent denoise/AGC)
+    // 1. Initialize Speex preprocessors (one per channel for independent denoise/AGC)
     let mut preprocessors: Vec<Preprocessor> = Vec::new();
     for _ in 0..actual_channels {
         let mut pp = Preprocessor::new(period_size, actual_rate)?;
@@ -35,7 +43,7 @@ pub fn record_thread(
     let mut channel_buffers: Vec<Vec<i16>> =
         (0..actual_channels).map(|_| vec![0i16; period_size]).collect();
 
-    // 3. Initialize Opus encoder (with resampling + channel conversion)
+    // 2. Initialize Opus encoder (with resampling + channel conversion)
     let mut encoder = OpusEncoder::new(
         actual_rate,
         actual_channels,
@@ -50,10 +58,9 @@ pub fn record_thread(
     // Accumulation buffer for PCM samples (i16)
     let mut accum_buf: Vec<i16> = Vec::with_capacity(input_frame_samples * 2);
 
-    // ALSA read buffer (interleaved i16, one period)
-    let mut read_buf = vec![0i16; period_size * actual_channels as usize];
-
-    let io = pcm.io_i16()?;
+    // Read buffer: one period of interleaved i16
+    let samples_per_period = period_size * actual_channels as usize;
+    let mut read_buf = vec![0i16; samples_per_period];
 
     log::info!(
         "Recording started: rate={}, ch={}, period={}, opus_frame_samples={}",
@@ -64,63 +71,58 @@ pub fn record_thread(
     );
 
     while running.load(Ordering::Relaxed) {
-        // Read one period from ALSA
-        match io.readi(&mut read_buf) {
-            Ok(frames) => {
-                // Split interleaved → per-channel
-                for i in 0..frames {
-                    for ch in 0..actual_channels as usize {
-                        channel_buffers[ch][i] =
-                            read_buf[i * actual_channels as usize + ch];
-                    }
-                }
+        // Try to drain one period from the ring buffer
+        let available = input_consumer.occupied_len();
+        if available >= samples_per_period {
+            let popped = input_consumer.pop_slice(&mut read_buf);
+            let frames = popped / actual_channels as usize;
 
-                // Run Speex preprocess on each channel independently
+            // Split interleaved → per-channel
+            for i in 0..frames {
                 for ch in 0..actual_channels as usize {
-                    preprocessors[ch].process(&mut channel_buffers[ch][..frames]);
+                    channel_buffers[ch][i] =
+                        read_buf[i * actual_channels as usize + ch];
                 }
+            }
 
-                // Merge per-channel → interleaved
-                for i in 0..frames {
-                    for ch in 0..actual_channels as usize {
-                        read_buf[i * actual_channels as usize + ch] =
-                            channel_buffers[ch][i];
-                    }
+            // Run Speex preprocess on each channel independently
+            for ch in 0..actual_channels as usize {
+                preprocessors[ch].process(&mut channel_buffers[ch][..frames]);
+            }
+
+            // Merge per-channel → interleaved
+            for i in 0..frames {
+                for ch in 0..actual_channels as usize {
+                    read_buf[i * actual_channels as usize + ch] =
+                        channel_buffers[ch][i];
                 }
+            }
 
-                // Accumulate processed PCM samples
-                accum_buf
-                    .extend_from_slice(&read_buf[..frames * actual_channels as usize]);
+            // Accumulate processed PCM samples
+            accum_buf.extend_from_slice(&read_buf[..frames * actual_channels as usize]);
 
-                // Encode complete frames
-                while accum_buf.len() >= input_frame_samples {
-                    let frame = &accum_buf[..input_frame_samples];
-                    match encoder.encode(frame) {
-                        Ok(opus_data) => {
-                            if !opus_data.is_empty() {
-                                if opus_tx.blocking_send(opus_data).is_err() {
-                                    log::warn!(
-                                        "Failed to send opus data, receiver dropped"
-                                    );
-                                    return Ok(());
-                                }
+            // Encode complete frames
+            while accum_buf.len() >= input_frame_samples {
+                let frame = &accum_buf[..input_frame_samples];
+                match encoder.encode(frame) {
+                    Ok(opus_data) => {
+                        if !opus_data.is_empty() {
+                            if opus_tx.blocking_send(opus_data).is_err() {
+                                log::warn!("Failed to send opus data, receiver dropped");
+                                return Ok(());
                             }
                         }
-                        Err(e) => {
-                            log::error!("Opus encode error: {}", e);
-                        }
                     }
-                    // Remove the consumed frame from the accumulation buffer
-                    accum_buf.drain(..input_frame_samples);
+                    Err(e) => {
+                        log::error!("Opus encode error: {}", e);
+                    }
                 }
+                accum_buf.drain(..input_frame_samples);
             }
-            Err(e) => {
-                log::warn!("ALSA capture error: {}, recovering...", e);
-                if let Err(e2) = pcm.prepare() {
-                    log::error!("Failed to recover PCM capture: {}", e2);
-                    break;
-                }
-            }
+        } else {
+            // Not enough data yet – sleep briefly to avoid busy-spinning.
+            // 5 ms is well under the 20 ms period, so we won't miss data.
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
 
