@@ -23,10 +23,6 @@ pub struct AudioConfig {
     pub capture_device: String,
     /// Playback device name
     pub playback_device: String,
-    /// Desired sample rate for capture
-    pub sample_rate: u32,
-    /// Desired channel count for capture
-    pub channels: u32,
     /// Opus codec sample rate (typically 24000)
     pub opus_sample_rate: u32,
     /// Opus codec channel count (typically 1 for mono)
@@ -39,12 +35,6 @@ pub struct AudioConfig {
     pub decode_frame_duration_ms: u32,
     /// 网络下发流的编码格式: "opus", "mp3", "pcm"
     pub stream_format: String,
-    /// Desired playback sample rate
-    pub playback_sample_rate: u32,
-    /// Desired playback channel count
-    pub playback_channels: u32,
-    /// Desired playback period (buffer) size (0 = let backend decide)
-    pub playback_period_size: usize,
 }
 
 impl Default for AudioConfig {
@@ -52,17 +42,12 @@ impl Default for AudioConfig {
         Self {
             capture_device: "default".to_string(),
             playback_device: "default".to_string(),
-            sample_rate: 24000,
-            channels: 2,
             opus_sample_rate: 24000,
             opus_channels: 1,
             opus_bitrate: 64000,
             encode_frame_duration_ms: 60,
             decode_frame_duration_ms: 20,
             stream_format: "opus".to_string(),
-            playback_sample_rate: 48000,
-            playback_channels: 2,
-            playback_period_size: 1024,
         }
     }
 }
@@ -100,29 +85,24 @@ impl AudioSystem {
         let running = Arc::new(AtomicBool::new(true));
 
         log::info!(
-            "AudioSystem starting — capture: \"{}\", playback: \"{}\", rate: {}Hz, ch: {}, opus: {}Hz/{}ch",
+            "AudioSystem starting — capture: \"{}\", playback: \"{}\", opus: {}Hz/{}ch",
             config.capture_device,
             config.playback_device,
-            config.sample_rate,
-            config.channels,
             config.opus_sample_rate,
             config.opus_channels,
         );
 
         // --- Open CPAL capture stream + ring buffer ---
-        let (capture_stream, capture_params, input_consumer) = cpal_device::open_capture(
+        let (capture_stream, capture_params, input_consumer) = cpal_device::AudioDevice::open_capture(
             &config.capture_device,
-            config.sample_rate,
-            config.channels,
+            config.opus_sample_rate, // Use opus sample rate as expectation
+            2,                       // Fixed 2 channels for capture expectation
             running.clone(),
         )?;
 
         // --- Open CPAL playback stream + ring buffer ---
-        let (playback_stream, playback_params, output_producer) = cpal_device::open_playback(
+        let (playback_stream, playback_params, output_producer) = cpal_device::AudioDevice::open_playback(
             &config.playback_device,
-            config.playback_sample_rate,
-            config.playback_channels,
-            config.playback_period_size,
             running.clone(),
         )?;
 

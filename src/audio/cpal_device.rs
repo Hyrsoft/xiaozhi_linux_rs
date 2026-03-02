@@ -1,8 +1,6 @@
-//! CPAL-based audio device wrappers for capture and playback.
-//!
-//! Replaces the previous ALSA-specific `alsa_device.rs` with a cross-platform
-//! implementation using `cpal`. Audio data is exchanged via lock-free ring buffers
-//! (`ringbuf`) between the CPAL callback threads and the application worker threads.
+//! 基于 cpal 的音频录制与播放设备封装。
+//! 使用 cpal 替代之前的 ALSA 实现，提供跨平台支持。
+//! 音频数据通过无锁环形缓冲区（ringbuf）在 CPAL 回调线程和应用程序工作线程之间交换。
 
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -15,28 +13,118 @@ use ringbuf::{
     HeapRb,
 };
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Ring buffer producer half (writing side) for i16 samples.
 pub type RbProducer = ringbuf::HeapProd<i16>;
 /// Ring buffer consumer half (reading side) for i16 samples.
 pub type RbConsumer = ringbuf::HeapCons<i16>;
 
-/// Parameters resolved from the CPAL device after stream creation.
+
+/// 创建音频流后，从 capl 设备协商得到的实际参数（采样率、通道数等）。
+/// 应用程序工作线程使用这些参数进行正确的编码/解码处理。
 #[derive(Debug, Clone)]
 pub struct CpalParams {
     /// Actual sample rate used by the stream
+    /// 实际的采样率
     pub sample_rate: u32,
     /// Actual number of channels
+    /// 实际的通道数
     pub channels: u32,
 }
 
 // ---------------------------------------------------------------------------
-//  Device lookup helpers
+//  Audio device enumeration (for CLI help / diagnostics)
 // ---------------------------------------------------------------------------
 
-/// Find a CPAL input (capture) device by name. "default" returns the host default.
-fn find_input_device(name: &str) -> Result<Device> {
+pub struct AudioDevice;
+
+impl AudioDevice {
+    /// 打印所有可用的音频输入/输出设备及其支持的配置。
+    /// 用于 `--help` / `--list-devices` 命令行输出，帮助用户选择设备名称。
+    pub fn print_audio_devices() {
+    let host = cpal::default_host();
+
+    println!("音频后端: {:?}", host.id());
+    println!();
+
+    // ---- 输入（录音）设备 ----
+    println!("══════════════════════════════════════════");
+    println!("  录音（输入）设备");
+    println!("══════════════════════════════════════════");
+
+    let default_in_name = host
+        .default_input_device()
+        .and_then(|d| d.name().ok())
+        .unwrap_or_default();
+
+    match host.input_devices() {
+        Ok(devices) => {
+            let mut count = 0u32;
+            for device in devices {
+                count += 1;
+                let name = device.name().unwrap_or_else(|_| "<unknown>".into());
+                let is_default = name == default_in_name;
+                println!(
+                    "  [{}] {}{}",
+                    count,
+                    name,
+                    if is_default { "  ← 默认" } else { "" }
+                );
+            }
+            if count == 0 {
+                println!("  (无可用录音设备)");
+            }
+        }
+        Err(e) => println!("  查询录音设备失败: {}", e),
+    }
+
+    println!();
+
+    // ---- 输出（播放）设备 ----
+    println!("══════════════════════════════════════════");
+    println!("  播放（输出）设备");
+    println!("══════════════════════════════════════════");
+
+    let default_out_name = host
+        .default_output_device()
+        .and_then(|d| d.name().ok())
+        .unwrap_or_default();
+
+    match host.output_devices() {
+        Ok(devices) => {
+            let mut count = 0u32;
+            for device in devices {
+                count += 1;
+                let name = device.name().unwrap_or_else(|_| "<unknown>".into());
+                let is_default = name == default_out_name;
+                println!(
+                    "  [{}] {}{}",
+                    count,
+                    name,
+                    if is_default { "  ← 默认" } else { "" }
+                );
+            }
+            if count == 0 {
+                println!("  (无可用播放设备)");
+            }
+        }
+        Err(e) => println!("  查询播放设备失败: {}", e),
+    }
+
+    println!();
+    println!("提示: 将上述设备名称填入 config.toml 的 capture_device / playback_device 字段。");
+    println!("      使用 \"default\" 则自动选择标记为 \"← 默认\" 的设备。");
+}
+
+// ---------------------------------------------------------------------------
+//  Device lookup helpers
+//  设备查找辅助函数
+// ---------------------------------------------------------------------------
+
+    /// 基于传入的设备名称查找 CPAL 输入（录音）设备。传入 "default" 则返回主机默认输入设备。
+    fn find_input_device(name: &str) -> Result<Device> {
     let host = cpal::default_host();
     if name == "default" {
         host.default_input_device()
@@ -48,8 +136,8 @@ fn find_input_device(name: &str) -> Result<Device> {
     }
 }
 
-/// Find a CPAL output (playback) device by name. "default" returns the host default.
-fn find_output_device(name: &str) -> Result<Device> {
+    /// 基于传入的设备名称查找 CPAL 输出（播放）设备。传入 "default" 则返回主机默认输出设备。
+    fn find_output_device(name: &str) -> Result<Device> {
     let host = cpal::default_host();
     if name == "default" {
         host.default_output_device()
@@ -65,36 +153,22 @@ fn find_output_device(name: &str) -> Result<Device> {
 //  Configuration negotiation helpers
 // ---------------------------------------------------------------------------
 
-/// Try to build a `StreamConfig` that matches the desired sample rate and channels,
-/// falling back to the device's default/supported configuration if needed.
-fn negotiate_input_config(
-    device: &Device,
-    desired_rate: u32,
-    desired_channels: u32,
-) -> Result<(StreamConfig, SampleFormat)> {
-    negotiate_config(device, desired_rate, desired_channels, true)
-}
-
-fn negotiate_output_config(
-    device: &Device,
-    desired_rate: u32,
-    desired_channels: u32,
-    desired_period: usize,
-) -> Result<(StreamConfig, SampleFormat)> {
-    let (mut cfg, fmt) = negotiate_config(device, desired_rate, desired_channels, false)?;
-    // If a period (buffer) size is requested, try to honour it.
-    if desired_period > 0 {
-        cfg.buffer_size = BufferSize::Fixed(desired_period as u32);
+    /// Try to build a `StreamConfig` that matches the desired sample rate and channels,
+    /// falling back to the device's default/supported configuration if needed.
+    fn negotiate_input_config(
+        device: &Device,
+        desired_rate: u32,
+        desired_channels: u32,
+    ) -> Result<(StreamConfig, SampleFormat)> {
+        Self::negotiate_config(device, desired_rate, desired_channels, true)
     }
-    Ok((cfg, fmt))
-}
 
-fn negotiate_config(
-    device: &Device,
-    desired_rate: u32,
-    desired_channels: u32,
-    is_input: bool,
-) -> Result<(StreamConfig, SampleFormat)> {
+    fn negotiate_config(
+        device: &Device,
+        desired_rate: u32,
+        desired_channels: u32,
+        is_input: bool,
+    ) -> Result<(StreamConfig, SampleFormat)> {
     let configs: Vec<SupportedStreamConfigRange> = if is_input {
         device
             .supported_input_configs()
@@ -115,17 +189,21 @@ fn negotiate_config(
         );
     }
 
-    // Log available ranges for debugging
+    // Log available ranges at debug level (can be very verbose on some devices)
     for c in &configs {
-        log::info!(
-            "CPAL supported config: channels={}, rate=[{}-{}], format={:?}, buffer={:?}",
+        log::debug!(
+            "CPAL supported config: channels={}, rate=[{}-{}], format={:?}",
             c.channels(),
             c.min_sample_rate().0,
             c.max_sample_rate().0,
             c.sample_format(),
-            c.buffer_size(),
         );
     }
+    log::info!(
+        "CPAL {} device: {} supported config(s) found",
+        if is_input { "capture" } else { "playback" },
+        configs.len(),
+    );
 
     let target_rate = SampleRate(desired_rate);
 
@@ -209,18 +287,18 @@ fn negotiate_config(
 //  Public API: open capture / playback streams
 // ---------------------------------------------------------------------------
 
-/// Open a capture (input) stream.
-///
-/// Returns the running `Stream`, negotiated parameters, and a `RbConsumer`
-/// from which the recording worker thread reads PCM i16 samples.
-pub fn open_capture(
-    device_name: &str,
-    sample_rate: u32,
-    channels: u32,
-    _running: Arc<AtomicBool>,
-) -> Result<(Stream, CpalParams, RbConsumer)> {
-    let device = find_input_device(device_name)?;
-    let (config, sample_format) = negotiate_input_config(&device, sample_rate, channels)?;
+    /// Open a capture (input) stream.
+    ///
+    /// Returns the running `Stream`, negotiated parameters, and a `RbConsumer`
+    /// from which the recording worker thread reads PCM i16 samples.
+    pub fn open_capture(
+        device_name: &str,
+        sample_rate: u32,
+        channels: u32,
+        _running: Arc<AtomicBool>,
+    ) -> Result<(Stream, CpalParams, RbConsumer)> {
+        let device = Self::find_input_device(device_name)?;
+        let (config, sample_format) = Self::negotiate_input_config(&device, sample_rate, channels)?;
 
     let actual_rate = config.sample_rate.0;
     let actual_channels = config.channels as u32;
@@ -230,8 +308,18 @@ pub fn open_capture(
     let rb = HeapRb::<i16>::new(rb_size.max(4096));
     let (mut producer, consumer) = rb.split();
 
-    let err_fn = |err: cpal::StreamError| {
-        log::error!("CPAL capture stream error: {}", err);
+    // Rate-limit error logging to avoid log spam (e.g. repeated POLLERR)
+    static CAPTURE_ERR_TS: AtomicU64 = AtomicU64::new(0);
+    let err_fn = move |err: cpal::StreamError| {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let prev = CAPTURE_ERR_TS.load(Ordering::Relaxed);
+        if now != prev {
+            CAPTURE_ERR_TS.store(now, Ordering::Relaxed);
+            log::error!("CPAL capture stream error: {}", err);
+        }
     };
 
     let stream = match sample_format {
@@ -281,31 +369,48 @@ pub fn open_capture(
     Ok((stream, params, consumer))
 }
 
-/// Open a playback (output) stream.
-///
-/// Returns the running `Stream`, negotiated parameters, and a `RbProducer`
-/// into which the playback worker thread writes decoded PCM i16 samples.
-pub fn open_playback(
-    device_name: &str,
-    sample_rate: u32,
-    channels: u32,
-    period_size: usize,
-    _running: Arc<AtomicBool>,
-) -> Result<(Stream, CpalParams, RbProducer)> {
-    let device = find_output_device(device_name)?;
-    let (config, sample_format) =
-        negotiate_output_config(&device, sample_rate, channels, period_size)?;
+    /// Open a playback (output) stream using the device's default configuration.
+    ///
+    /// The device's preferred sample rate, channels, and buffer size are used directly.
+    /// Speex resampling in the decoder handles any rate/channel conversion.
+    pub fn open_playback(
+        device_name: &str,
+        _running: Arc<AtomicBool>,
+    ) -> Result<(Stream, CpalParams, RbProducer)> {
+        let device = Self::find_output_device(device_name)?;
+    let supported = device
+        .default_output_config()
+        .context("Failed to get default output config")?;
+    let sample_format = supported.sample_format();
+    let config = supported.config();
 
     let actual_rate = config.sample_rate.0;
     let actual_channels = config.channels as u32;
+
+    log::info!(
+        "CPAL playback device default: rate={}, ch={}, fmt={:?}",
+        actual_rate,
+        actual_channels,
+        sample_format,
+    );
 
     // Ring buffer: ~500 ms worth of samples
     let rb_size = (actual_rate as usize) * (actual_channels as usize) / 2;
     let rb = HeapRb::<i16>::new(rb_size.max(4096));
     let (producer, mut consumer) = rb.split();
 
-    let err_fn = |err: cpal::StreamError| {
-        log::error!("CPAL playback stream error: {}", err);
+    // Rate-limit error logging to avoid log spam (e.g. repeated POLLERR)
+    static PLAYBACK_ERR_TS: AtomicU64 = AtomicU64::new(0);
+    let err_fn = move |err: cpal::StreamError| {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let prev = PLAYBACK_ERR_TS.load(Ordering::Relaxed);
+        if now != prev {
+            PLAYBACK_ERR_TS.store(now, Ordering::Relaxed);
+            log::error!("CPAL playback stream error: {}", err);
+        }
     };
 
     let stream = match sample_format {
@@ -358,4 +463,5 @@ pub fn open_playback(
     );
 
     Ok((stream, params, producer))
+    }
 }

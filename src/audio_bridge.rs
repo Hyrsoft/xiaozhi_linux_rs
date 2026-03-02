@@ -20,17 +20,12 @@ impl AudioBridge {
         let audio_config = AudioConfig {
             capture_device: config.capture_device.to_string(),
             playback_device: config.playback_device.to_string(),
-            sample_rate: config.hello_sample_rate,
-            channels: 2, // capture device typically 2 channels
             opus_sample_rate: config.hello_sample_rate,
             opus_channels: config.hello_channels as u32,
             opus_bitrate: 64000,
             encode_frame_duration_ms: 20,
             decode_frame_duration_ms: config.hello_frame_duration,
             stream_format: config.stream_format.as_str().to_string(),
-            playback_sample_rate: config.playback_sample_rate,
-            playback_channels: config.playback_channels,
-            playback_period_size: config.playback_period_size,
         };
 
         let (opus_tx, mut opus_rx) = mpsc::channel::<Vec<u8>>(100);

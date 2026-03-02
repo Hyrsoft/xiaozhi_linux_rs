@@ -44,9 +44,6 @@ pub struct Config {
     pub capture_device: Cow<'static, str>,
     pub playback_device: Cow<'static, str>,
     pub stream_format: AudioStreamFormat,
-    pub playback_sample_rate: u32,
-    pub playback_channels: u32,
-    pub playback_period_size: usize,
 
     // GUI进程配置
     pub gui_local_port: u16,
@@ -99,15 +96,6 @@ impl Config {
             capture_device: Cow::Borrowed(env!("AUDIO_CAPTURE_DEVICE")),
             playback_device: Cow::Borrowed(env!("AUDIO_PLAYBACK_DEVICE")),
             stream_format,
-            playback_sample_rate: env!("AUDIO_PLAYBACK_SAMPLE_RATE")
-                .parse()
-                .map_err(|_| "Failed to parse AUDIO_PLAYBACK_SAMPLE_RATE")?,
-            playback_channels: env!("AUDIO_PLAYBACK_CHANNELS")
-                .parse()
-                .map_err(|_| "Failed to parse AUDIO_PLAYBACK_CHANNELS")?,
-            playback_period_size: env!("AUDIO_PLAYBACK_PERIOD_SIZE")
-                .parse()
-                .map_err(|_| "Failed to parse AUDIO_PLAYBACK_PERIOD_SIZE")?,
 
             // GUI进程配置
             gui_local_port: env!("GUI_LOCAL_PORT")
@@ -176,13 +164,6 @@ impl Config {
             anyhow::bail!(
                 "配置错误：hello采样率 {}Hz 不合法 (支持 8000-48000)",
                 self.hello_sample_rate
-            );
-        }
-
-        if self.playback_sample_rate < 8000 || self.playback_sample_rate > 192000 {
-            anyhow::bail!(
-                "配置错误：播放采样率 {}Hz 不合法 (支持 8000-192000)",
-                self.playback_sample_rate
             );
         }
 

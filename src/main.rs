@@ -22,8 +22,42 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 use crate::mcp_gateway::init_mcp_gateway;
 
+/// 打印帮助信息（含版本、用法、音频设备探测）
+fn print_help() {
+    let name = env!("APP_NAME");
+    let version = env!("APP_VERSION");
+    println!("{} v{}", name, version);
+    println!();
+    println!("用法: {} [选项]", name);
+    println!();
+    println!("选项:");
+    println!("  -h, --help           显示帮助信息并列出可用音频设备");
+    println!("  --list-devices       仅列出可用音频设备");
+    println!();
+    println!("配置文件:");
+    println!("  编译时配置  config.toml        (修改后需重新编译)");
+    println!("  运行时配置  xiaozhi_config.json (自动生成，可热修改)");
+    println!();
+    println!("──────────────────────────────────────────");
+    println!("  可用音频设备");
+    println!("──────────────────────────────────────────");
+    println!();
+    audio::AudioDevice::print_audio_devices();
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // 解析命令行参数
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_help();
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--list-devices") {
+        audio::AudioDevice::print_audio_devices();
+        return Ok(());
+    }
+
     // 初始化日志
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format(|buf, record| {

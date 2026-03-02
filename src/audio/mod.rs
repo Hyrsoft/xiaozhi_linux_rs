@@ -13,3 +13,4 @@ mod speex;
 pub mod stream_decoder;
 
 pub use audio_system::{AudioConfig, AudioSystem};
+pub use cpal_device::AudioDevice;
