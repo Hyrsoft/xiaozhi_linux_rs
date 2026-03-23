@@ -171,8 +171,10 @@ fn main() {
     // 处理 C 依赖构建 (opus, speexdsp)
     // 交叉编译时从源码构建或通过 pkg-config 查找静态库
     // 本地编译时通过 pkg-config 查找系统动态库
+    // 设置 XIAOZHI_FORCE_STATIC_LIBS=1 可强制本地编译也走静态路径（供 x86_64 编译脚本使用）
     let host = env::var("HOST").unwrap_or_default();
-    if target != host {
+    let force_static = env::var("XIAOZHI_FORCE_STATIC_LIBS").is_ok();
+    if target != host || force_static {
         build_or_probe_c_deps(&target);
     } else {
         pkg_config::Config::new()
