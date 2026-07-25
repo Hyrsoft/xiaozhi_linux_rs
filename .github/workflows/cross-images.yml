@@ -52,6 +52,7 @@ jobs:
           targets: ${{ matrix.target }}
           push: true
           set: |
-            ${{ matrix.target }}.tags=${{ env.REGISTRY }}:${{ matrix.target }}-sdk-v1,${{ env.REGISTRY }}:${{ matrix.target }}-sdk-v1-${{ github.sha }}
+            ${{ matrix.target }}.tags=${{ env.REGISTRY }}:${{ matrix.target }}-sdk-v1
+            ${{ matrix.target }}.tags+=${{ env.REGISTRY }}:${{ matrix.target }}-sdk-v1-${{ github.sha }}
             ${{ matrix.target }}.cache-from=type=gha,scope=${{ matrix.target }}
             ${{ matrix.target }}.cache-to=type=gha,mode=max,scope=${{ matrix.target }}
