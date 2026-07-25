@@ -45,7 +45,7 @@ build_alsa_shared() {
         echo "alsa-lib 共享库已存在，跳过编译。"
     else
         local alsa_tarball="alsa-lib-${alsa_version}.tar.bz2"
-        local alsa_url="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${alsa_tarball}"
+        local alsa_url="https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/${alsa_tarball}"
 
         if [ ! -d "$alsa_src_dir" ]; then
             echo "下载 alsa-lib..."

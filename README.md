@@ -182,8 +182,8 @@ aplay -l
 
 Core 默认通过 UDP 与 GUI 进程交换 JSON 消息。可参考以下项目和文档完成适配：
 
-- [LVGL GUI 示例](https://github.com/Hyrsoft/lvgl_xiaozhi_gui)
-- [Slint GUI 示例](https://github.com/Hyrsoft/slint_xiaozhi_gui)
+- [LVGL GUI 示例](https://github.com/haoyn231/lvgl_xiaozhi_gui)
+- [Slint GUI 示例](https://github.com/haoyn231/slint_xiaozhi_gui)
 - [GUI 适配说明](./docs/GUI适配说明.md)
 
 ### MCP 工具

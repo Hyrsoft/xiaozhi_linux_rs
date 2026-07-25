@@ -194,7 +194,7 @@ fn build_or_probe_c_deps(target: &str) {
     if pkg_config::Config::new().statik(true).probe("speexdsp").is_err() {
         println!("cargo:warning=speexdsp not found via pkg-config for target {}. Building from source...", target);
         let speexdsp_version = "1.2.1";
-        let speexdsp_url = format!("https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/speexdsp-{}.tar.gz", speexdsp_version);
+        let speexdsp_url = format!("https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/speexdsp-{}.tar.gz", speexdsp_version);
         let src_dir = download_and_extract(&speexdsp_url, "speexdsp", speexdsp_version, out_path);
         
         let mut config = autotools::Config::new(src_dir);
@@ -218,7 +218,7 @@ fn build_or_probe_c_deps(target: &str) {
     if pkg_config::Config::new().statik(true).probe("opus").is_err() {
         println!("cargo:warning=opus not found via pkg-config for target {}. Building from source...", target);
         let opus_version = "1.5.2";
-        let opus_url = format!("https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/opus-{}.tar.gz", opus_version);
+        let opus_url = format!("https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/opus-{}.tar.gz", opus_version);
         let src_dir = download_and_extract(&opus_url, "opus", opus_version, out_path);
         
         let mut config = autotools::Config::new(src_dir);

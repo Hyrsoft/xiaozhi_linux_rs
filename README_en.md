@@ -165,7 +165,7 @@ Other Linux devices on different target platforms (including x86 virtual machine
 
 ```bash
 # Clone the repository
-git clone https://github.com/Hyrsoft/xiaozhi_linux_rs.git
+git clone https://github.com/haoyn231/xiaozhi_linux_rs.git
 cd xiaozhi_linux_rs
 
 # Install dependencies (Ubuntu/Debian)

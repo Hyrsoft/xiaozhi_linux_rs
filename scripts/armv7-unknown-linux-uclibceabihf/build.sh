@@ -52,7 +52,7 @@ mkdir -p "$TARGET_DIR"
 
 # --- 1A. 下载 uClibc 交叉编译工具链 ---
 TOOLCHAIN_NAME="${CROSS_PREFIX}"
-TOOLCHAIN_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
+TOOLCHAIN_URL="https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
 
 TOOLCHAIN_DIR=$(download_and_setup_toolchain \
     "$TARGET_DIR" \

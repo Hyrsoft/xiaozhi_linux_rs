@@ -49,7 +49,7 @@ mkdir -p "$TARGET_DIR"
 
 # --- 1A. 下载 GNU 交叉编译工具链 ---
 TOOLCHAIN_NAME="gcc-arm-8.3-2019.02-x86_64-arm-linux-gnueabihf"
-TOOLCHAIN_URL="https://github.com/Hyrsoft/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
+TOOLCHAIN_URL="https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/${TOOLCHAIN_NAME}.tar.xz"
 
 TOOLCHAIN_DIR=$(download_and_setup_toolchain \
     "$TARGET_DIR" \

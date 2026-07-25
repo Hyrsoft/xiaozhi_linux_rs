@@ -1,6 +1,6 @@
 ## 示例 GUI 项目
-- https://github.com/Hyrsoft/lvgl_xiaozhi_gui
-- https://github.com/Hyrsoft/slint_xiaozhi_gui
+- https://github.com/haoyn231/lvgl_xiaozhi_gui
+- https://github.com/haoyn231/slint_xiaozhi_gui
 
 ## 一、配置 IP 与端口
 
@@ -114,6 +114,5 @@ GUI 也可以作为输入设备（如果有触摸屏或键盘）主动向 Core �
 - **常见用法**：
 
   - **主动打断**：当用户点击屏幕时，GUI 可以发送特定的打断指令（如 `{"type":"abort"}` 视具体云端协议而定）来中断设备当前的说话状态。
-
 
 

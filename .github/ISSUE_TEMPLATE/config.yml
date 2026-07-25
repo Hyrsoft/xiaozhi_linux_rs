@@ -1,5 +1,5 @@
 blank_issues_enabled: false # 禁用 GitHub 默认的空白 Issue，强制用户从上面三个模板中选一个
 contact_links:
   - name: Documentation
-    url: https://github.com/Hyrsoft/xiaozhi_linux_rs/wiki
+    url: https://github.com/haoyn231/xiaozhi_linux_rs/wiki
     about: Please check the documentation before opening an issue.
