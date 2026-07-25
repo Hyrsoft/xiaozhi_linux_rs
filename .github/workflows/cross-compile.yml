@@ -54,14 +54,16 @@ jobs:
 
       - name: Install stable Rust
         if: ${{ matrix.target != 'armv7-unknown-linux-uclibceabihf' }}
-        uses: dtolnay/rust-toolchain@1.90.0
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.90.0
           targets: ${{ matrix.target }}
 
       - name: Install nightly Rust for uClibc
         if: ${{ matrix.target == 'armv7-unknown-linux-uclibceabihf' }}
-        uses: dtolnay/rust-toolchain@nightly-2025-09-14
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2025-09-14
           components: rust-src
 
       - name: Install cross
