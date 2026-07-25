@@ -9,4 +9,3 @@ image = "ghcr.io/haoyn231/xiaozhi-linux-rs-cross:armv7-gnu-sdk-v1"
 
 [target.armv7-unknown-linux-uclibceabihf]
 image = "ghcr.io/haoyn231/xiaozhi-linux-rs-cross:armv7-uclibc-sdk-v1"
-build-std = true
