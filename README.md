@@ -1,250 +1,276 @@
-# Xiaozhi Linux
+<div align="center">
+  <img width="180" src="./docs/images/logo.png" alt="Xiaozhi Linux logo">
 
-![logo](./docs/images/logo.png)
+  <h1>Xiaozhi Linux</h1>
+  <p>面向 Linux 与嵌入式设备的 Rust 小智 AI 客户端核心</p>
 
-[English](./README_en.md) | 简体中文 
+  <a href="https://github.com/haoyn231/xiaozhi_linux_rs/releases/latest"><img src="https://img.shields.io/github/v/release/haoyn231/xiaozhi_linux_rs?display_name=tag&sort=semver" alt="Latest release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Core-Rust%202024-DEA584" alt="Rust 2024">
+  <img src="https://img.shields.io/badge/Platform-Linux-FCC624" alt="Linux">
+  <img src="https://img.shields.io/badge/Targets-x86__64%20%7C%20ARMv7%20%7C%20AArch64-informational" alt="x86_64, ARMv7 and AArch64">
+  <br>
+  <a href="https://github.com/haoyn231/xiaozhi_linux_rs/actions/workflows/cross-compile.yml"><img src="https://github.com/haoyn231/xiaozhi_linux_rs/actions/workflows/cross-compile.yml/badge.svg" alt="Cross Compile"></a>
+  <a href="https://github.com/haoyn231/xiaozhi_linux_rs/stargazers"><img src="https://img.shields.io/github/stars/haoyn231/xiaozhi_linux_rs.svg" alt="GitHub stars"></a>
 
----
-
-
-
-## 项目简介
-
-本项目是小智 AI 客户端在 Linux 平台的完整实现，集成了**网络交互、音频处理、业务逻辑控制**。通过统一的 Rust 应用整合了音频、GUI 交互和云端通信，提供了现代化、高效的 AI 客户端方案。
-
->**GUI 设计**：由于 Rust 暂缺成熟且开源友好的嵌入式 GUI 库，本项目**不集成 GUI 功能**，而是通过进程间通信与独立的 GUI 进程交互。这种解耦设计可根据具体设备需求灵活选择 LVGL、Qt、Slint、TUI 等图形库，不用 GUI 进程也不影响本项目的完整功能。
-
-
-本项目建立在[虾哥 esp32 版小智](https://github.com/78/xiaozhi-esp32)和[百问网 Linux 版小智](https://github.com/100askTeam/xiaozhi-linux)的优良设计和宝贵经验之上，向他们致敬。
-
-参考文档：
-- [音频设备配置说明](./docs/音频设备配置说明.md)
-- [MCP 功能说明](./docs/MCP功能说明.md)
-- [OTA 功能说明](./docs/OTA功能说明.md)
-- [GUI 适配说明](./docs/GUI适配说明.md)
-
-QQ群：695113129
+  <p>
+    <a href="./README_en.md">English</a> |
+    <strong>简体中文</strong>
+  </p>
+</div>
 
 ---
 
+## 📖 项目简介
 
+**Xiaozhi Linux** 是小智 AI 客户端在 Linux 平台上的 Rust 实现，集成云端协议、实时音频、设备激活、业务状态机、GUI 进程通信和 MCP 工具扩展，适用于桌面 Linux、ARM 开发板以及资源受限的嵌入式设备。
 
-## 系统架构
+项目专注于稳定、轻量的客户端核心，不内置特定 GUI。核心进程通过 UDP 与独立界面通信，可按硬件需求搭配 LVGL、Qt、Slint、TUI，或直接以无界面方式运行。
+
+<p align="center">
+  <a href="https://github.com/78/xiaozhi-esp32">小智 ESP32</a> |
+  <a href="https://github.com/100askTeam/xiaozhi-linux">百问网 Linux 版</a> |
+  <a href="https://github.com/haoyn231/xiaozhi_linux_rs/releases/latest">下载最新版</a> |
+  <a href="https://github.com/haoyn231/xiaozhi_linux_rs/issues">问题反馈</a>
+</p>
+
+### ✨ 核心特性
+
+- **实时音频**：支持 I2S/USB 声卡、ALSA 采集与播放、Opus 编解码，以及 SpeexDSP 降噪、AGC 和重采样。
+- **云端对话**：支持 WebSocket 全双工连接、心跳保活、设备鉴权、Hello 握手、TTS、STT 和控制指令。
+- **设备管理**：自动完成设备激活与绑定，持久化 Client ID / Device ID，并管理空闲、聆听、处理、说话和网络错误状态。
+- **GUI 解耦**：通过 UDP IPC 同步激活码、运行状态、Toast 和 TTS 字幕，GUI 也可向核心进程发送控制指令。
+- **MCP 扩展**：通过配置动态接入 Subprocess、HTTP、TCP 工具，支持同步和后台执行模式，无需修改核心代码。
+- **多架构构建**：提供 x86_64、ARMv7 GNU、ARMv7 uClibc 和 AArch64 GNU 构建脚本及 GitHub Actions 工作流。
+
+---
+
+## 🧩 系统架构
 
 ```mermaid
 graph TD
-    Config[配置文件<br/>xiaozhi_config.json]
+    Config["配置<br/>config.toml / xiaozhi_config.json"]
 
-    subgraph External [外部服务]
-        Cloud[小智云端服务器 WebSocket/HTTP]
-        MCP_Ext[外部 MCP 服务<br/>进程/HTTP/TCP]
+    subgraph External["外部服务"]
+        Cloud["小智云端<br/>WebSocket / HTTP"]
+        Tools["外部 MCP 工具<br/>Subprocess / HTTP / TCP"]
     end
 
-    subgraph "Xiaozhi Linux App (本项目)"
-        Net[网络模块]
-        Audio[音频处理<br/>ALSA + Opus + SpeexDSP]
-        Logic[状态机 & 业务逻辑]
-        MCP[MCP 网关<br/>动态加载多协议]
-        
-        Net <--> Logic
-        Audio <--> Logic
-        Logic <--> MCP
+    subgraph Core["Xiaozhi Linux Core"]
+        Network["网络与协议"]
+        Controller["状态机与业务控制"]
+        Audio["ALSA + Opus + SpeexDSP"]
+        MCP["MCP Gateway"]
+        IPC["GUI Bridge"]
+
+        Network <--> Controller
+        Audio <--> Controller
+        MCP <--> Controller
+        IPC <--> Controller
     end
 
-    subgraph "独立 GUI 进程 (可选)"
-        GUI[GUI 界面<br/>LVGL/Qt/Slint/TUI]
+    subgraph GUI["独立 GUI 进程（可选）"]
+        View["LVGL / Qt / Slint / TUI"]
     end
 
-    subgraph Hardware [硬件]
-        Mic[麦克风]
-        Speaker[扬声器]
-        Screen[屏幕]
-        Touch[触控]
+    subgraph Hardware["硬件"]
+        Mic["麦克风"]
+        Speaker["扬声器"]
+        Screen["屏幕 / 触控"]
     end
 
-    Config -.->|启动时读取<br/>动态加载参数| Logic
-    Config -.->|动态加载工具| MCP
-
-    Net <-->|WSS / HTTP| Cloud
-    MCP <-->|多协议交互| MCP_Ext
+    Config -.-> Controller
+    Network <-->|"WSS / HTTP"| Cloud
+    MCP <-->|"JSON-RPC"| Tools
     Audio <--> Mic
     Audio <--> Speaker
-    Logic <-->|IPC<br/>UDP事件| GUI
-    GUI <--> Screen
-    GUI <--> Touch
-    
-    style Audio fill:#ace,stroke:#888,stroke-width:2px
-    style GUI fill:#fcc,stroke:#888,stroke-width:2px
-    style Config fill:#eef,stroke:#888,stroke-width:2px,stroke-dasharray: 5 5
-    style MCP fill:#efe,stroke:#888,stroke-width:2px
+    IPC <-->|"UDP / JSON"| View
+    View <--> Screen
 ```
 
-## ✨ 功能
-
-### 已实现的功能
-
-- ✓ **音频处理**
-  - 支持 I2S 声卡和 USB 声卡
-  - ALSA 实时音频采集与播放
-  - Opus 音频编码（16kHz、PCM16）与解码
-  - SpeexDSP 实时处理（降噪、AGC、重采样）
-  - 支持自定义音频设备配置，参考[音频设备配置说明](./docs/音频设备配置说明.md)
-
-- ✓ **云端交互与协议**
-  - WebSocket 全双工长连接与心跳保活
-  - 设备鉴权认证与 Hello 握手
-  - TTS（文本转语音）、STT（语音转文字）、IoT 控制指令
-
-- ✓ **设备管理**
-  - 自动设备激活与绑定
-  - 设备身份持久化（Client ID、Device ID）
-  - 状态机管理（空闲、聆听、处理、说话、网络错误）
-
-- ✓ **GUI 交互**
-  - 基于 UDP 的轻量级进程间通信（IPC）
-  - 实时状态同步（聆听、处理、说话、空闲等）
-  - 云端 TTS 文本播报同步
-  - 灵活的解耦架构，支持对接独立 GUI 进程，参考[GUI 适配说明](./docs/GUI适配说明.md)
-
-- ✓ **配置系统**
-  - TOML 文件配置加载
-  - 运行时参数持久化
-  - 环境变量覆盖
-
-- ✓ **MCP 扩展能力**
-  - 解耦的 MCP 网关设计，支持外部工具动态集成
-  - 标准 JSON-RPC 消息处理与工具生命周期管理
-  - Subprocess、HTTP、TCP 多种通信方式
-  - sync 和 background 两种模式
-  - 支持动态工具配置，修改后无需重新编译，参考[MCP 功能说明](./docs/MCP功能说明.md)
-  - 提供多种 MCP 示例，参考`examples`目录
-
-### 待实现的功能
-
-
-- ☐ **IoT 与智能家居联动**
-
 ---
 
-### 关于本地离线唤醒与音频前端处理（AFE）
+## 🚀 快速开始
 
-本项目暂时不计划内置本地离线唤醒与 AFE 功能。一方面，当前维护者缺乏足够的音频算法知识，难以保证该类功能在不同设备上的效果与稳定性；另一方面，本项目在设计上更强调 Linux 平台的通用性，而离线唤醒、回声消除、波束成形等 AFE 能力通常高度依赖麦克风阵列、声卡链路、扬声器布局和具体硬件调校方案。
+### 下载预编译版本
 
-因此，这部分能力更适合由设备厂商、板级 BSP、独立音频前端进程或专用硬件模块提供。本项目会继续保持对标准 ALSA 音频输入输出的支持，并通过配置和外部进程集成方式，为不同硬件方案保留接入空间。
+前往 [GitHub Releases](https://github.com/haoyn231/xiaozhi_linux_rs/releases/latest) 下载与设备架构和 C 运行库匹配的可执行文件：
 
+| Release 文件 | 目标环境 |
+| :--- | :--- |
+| `xiaozhi_linux_rs-x86_64-gnu` | x86_64 Linux / GLIBC |
+| `xiaozhi_linux_rs-aarch64-gnu` | AArch64 Linux / GLIBC |
+| `xiaozhi_linux_rs-armv7-gnueabihf` | ARMv7 Linux / GLIBC hard-float |
+| `xiaozhi_linux_rs-armv7-uclibceabihf` | ARMv7 Linux / uClibc hard-float，主要用于 RV1103/RV1106 |
 
-> 注：ESP32 环境中，小智通常作为唯一的固件程序，需要大包大揽地管理从底层 Wi-Fi 驱动、配网协议（BluFi/AP）、系统自更新（OTA）到开机自启动的所有逻辑。而在 Linux 系统中，小智是以一个独立系统进程的形式存在的。因此，许多在嵌入式端必须内置的功能，如配网、硬件驱动、启动管理等，在 Linux 版中被移交给了操作系统更专业的组件。同样的，OTA 功能也不会内置于本项目，而是由其他项目进行实现，具体见[ OTA 说明](./docs/OTA功能说明.md)。
-
-## 快速开始 
-
-### 依赖环境
-
-- **Rust Toolchain** (Stable 1.75+)
-
-- **Linux 开发环境** 
-
-- **C 开发工具链** (gcc, make, pkg-config)
-
-
-### 已验证的设备
-
-> 运行该项目，需要目标设备有音频输入和输出功能
-
-- **armv7-unknow-linux-uclibceabihf**
-  - [Luckfox pico 系列](https://wiki.luckfox.com/zh/Luckfox-Pico-RV1106/)（Rockchip RV1106, Buildroot, I2S Sound Card）
-  - [Echo-Mate 桌面机器人](https://github.com/No-Chicken/Echo-Mate) （Rockchip RV1106, Buildroot, I2S Sound Card）
-- **armv7-unknow-linux-gnueabihf**
-  - [Luckfox Lyra 系列](https://wiki.luckfox.com/zh/Luckfox-Lyra/Introduction) （Rockchip RK3506, Buildroot, USB Sound Card）
-- **aarch64-unknown-linux-gnu**
-  - [Dshanpi-A1](https://wiki.dshanpi.org/docs/DshanPi-A1/intro/) (Rockchip RK3576, Armbian, Both I2S and USB Sound Card)
-  - 红米手机2 （Qualcomm Snapdragon 410, Armbian, I2S Sound Card）
-  - N1 盒子 （Amlogic S905D, Armbian, USB Sound Card）
-- **x86_64-unknown-linux-gnu**
-  - 安装了Arch Linux 的笔记本电脑
-
-其他目标平台的 Linux 设备（包括x86虚拟机）暂未进行验证，理论上都支持，具体交叉编译流程参考 [Rust Book](https://doc.rust-lang.org/beta/rustc/platform-support.html) 和 [RV1106 的编译脚本](./boards/rv1106_uclibceabihf/armv7_uclibc_build.sh)。
-
-
-**欢迎进行测试和提交 Pull Request**（scripts 中的编译脚本、 README 的当前部分，以及`examples`目录中的示例代码）
-
----
-
-
-
-### 本地编译与运行
+下载后添加执行权限并运行：
 
 ```bash
-# 克隆项目
-git clone https://github.com/Hyrsoft/xiaozhi_linux_rs.git
+chmod +x ./xiaozhi_linux_rs-x86_64-gnu
+./xiaozhi_linux_rs-x86_64-gnu
+```
+
+> Release 中的 GNU 二进制基于 GCC 8.3 工具链构建，需要 GLIBC 2.28 或更高版本。请通过 `ldd --version` 检查设备环境；更旧的系统可使用仓库内脚本自行构建。
+
+### 从源码编译
+
+需要 Rust 1.85+、C/C++ 构建工具和 ALSA、Opus、SpeexDSP 开发库。
+
+```bash
+git clone https://github.com/haoyn231/xiaozhi_linux_rs.git
 cd xiaozhi_linux_rs
 
-# 安装依赖（Ubuntu/Debian）
+# Ubuntu / Debian
+sudo apt-get update
 sudo apt-get install -y \
+    build-essential \
+    pkg-config \
     libasound2-dev \
     libopus-dev \
-    libspeexdsp-dev \
-    pkg-config
+    libspeexdsp-dev
 
-# 编译
 cargo build --release
-
-# 运行（需要网络连接和配置文件）
 cargo run --release
 ```
 
-### 交叉编译到嵌入式设备
+程序首次启动时会在当前工作目录生成 `xiaozhi_config.json`，并自动写入设备标识。运行前请确认设备具备可用的音频输入、音频输出和网络连接。
 
-#### 以编译到 Luckfox Pico (RV1106) 为例
+### 配置音频设备
+
+使用 ALSA 工具查看可用设备：
 
 ```bash
-# 不需要准备 sdk 环境，直接使用交叉编译脚本即可，它会自动下载交叉编译工具链和依赖库，并进行编译和链接
+arecord -l
+aplay -l
+```
 
-# 添加对应目标支持
-rustup target add armv7-unknown-linux-uclibceabihf
+然后在首次运行生成的 `xiaozhi_config.json` 中找到并修改输入、输出设备字段，例如：
+
+```json
+{
+  "capture_device": "plughw:0,0",
+  "playback_device": "plughw:1,0"
+}
+```
+
+完整的设备名格式、查询方法和配置示例见 [音频设备配置说明](./docs/音频设备配置说明.md)。
+
+---
+
+## ⚙️ 配置说明
+
+项目包含两层配置：
+
+- `config.toml`：编译期默认配置，由 `build.rs` 嵌入可执行文件，修改后需要重新编译。
+- `xiaozhi_config.json`：运行时配置，首次启动自动生成；修改后重启程序即可生效。
+
+| 配置范围 | 主要内容 |
+| :--- | :--- |
+| 音频 | 采集/播放设备、下发流格式、播放采样率、声道和缓冲周期 |
+| GUI | Core 与 GUI 的 UDP 地址、端口和缓冲区大小 |
+| 网络 | WebSocket、OTA 地址、Token、Device ID 和 Client ID |
+| Hello | 上行音频格式、采样率、声道和帧时长 |
+| MCP | 是否启用网关以及外部工具定义 |
+
+当前网络下发流支持 `opus` 和 `pcm`；`mp3` 配置项已预留，但尚未实现解码。
+
+---
+
+## 🔌 GUI 与 MCP 扩展
+
+### 独立 GUI
+
+Core 默认通过 UDP 与 GUI 进程交换 JSON 消息。可参考以下项目和文档完成适配：
+
+- [LVGL GUI 示例](https://github.com/Hyrsoft/lvgl_xiaozhi_gui)
+- [Slint GUI 示例](https://github.com/Hyrsoft/slint_xiaozhi_gui)
+- [GUI 适配说明](./docs/GUI适配说明.md)
+
+### MCP 工具
+
+MCP Gateway 可从配置中动态加载外部工具，适合接入系统状态查询、屏幕亮度、远程播放器和局域网设备控制等能力。
+
+| 传输方式 | 使用场景 |
+| :--- | :--- |
+| `subprocess` | 调用本地 Shell、Python 或其他可执行程序 |
+| `http` | 调用远端或局域网 HTTP 服务 |
+| `tcp` | 与自定义 TCP 服务或硬件网关通信 |
+
+详细字段、执行模式和示例见 [MCP 功能说明](./docs/MCP功能说明.md) 与 [`examples`](./examples) 目录。
+
+---
+
+## 💻 平台支持
+
+状态说明：✅ 已提供构建脚本并完成设备验证　🧪 已提供构建脚本，仍欢迎更多设备测试
+
+| Rust Target | C 运行库 | 已验证设备 | 状态 |
+| :--- | :--- | :--- | :---: |
+| `armv7-unknown-linux-uclibceabihf` | uClibc | Luckfox Pico、Echo-Mate（RV1106） | ✅ |
+| `armv7-unknown-linux-gnueabihf` | GLIBC | Luckfox Lyra（RK3506） | ✅ |
+| `aarch64-unknown-linux-gnu` | GLIBC | DshanPi-A1（RK3576）、红米手机 2、N1 盒子 | ✅ |
+| `x86_64-unknown-linux-gnu` | GLIBC | Arch Linux 笔记本 | ✅ |
+| 其他 Linux 目标 | 视平台而定 | 尚未系统验证 | 🧪 |
+
+目标设备需要提供 ALSA 兼容的音频输入和输出。对于未列出的 Linux 开发板、虚拟机和发行版，理论上可以运行，但需要自行确认 C 运行库、`libasound.so.2` 和声卡驱动兼容性。
+
+---
+
+## 🛠️ 交叉编译
+
+仓库中的脚本会下载所需工具链与依赖源码，并采用混合链接方式构建：运行时动态链接目标系统的 libc 和 `libasound`，Opus 与 SpeexDSP 静态链接进可执行文件。
+
+| 目标 | 构建命令 | 详细说明 |
+| :--- | :--- | :--- |
+| ARMv7 uClibc | `bash scripts/armv7-unknown-linux-uclibceabihf/build.sh` | [README](./scripts/armv7-unknown-linux-uclibceabihf/README.md) |
+| ARMv7 GNU | `bash scripts/armv7-unknown-linux-gnueabihf/build.sh` | [README](./scripts/armv7-unknown-linux-gnueabihf/README.md) |
+| AArch64 GNU | `bash scripts/aarch64-unknown-linux-gnu/build.sh` | [README](./scripts/aarch64-unknown-linux-gnu/README.md) |
+| x86_64 GNU | `bash scripts/x86_64-unknown-linux-gnu/build.sh` | [README](./scripts/x86_64-unknown-linux-gnu/README.md) |
+
+以 Luckfox Pico / RV1106 为例：
+
+```bash
 rustup toolchain install nightly
 rustup component add rust-src --toolchain nightly
-
-# 使用提供的编译脚本
-./scripts/armv7-unknown-linux-uclibceabihf/build.sh
-
-# 编译输出：target/armv7-unknown-linux-uclibceabihf/release/xiaozhi_linux_rs
+bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
 ```
 
-#### 验证编译结果
+输出文件位于：
 
-```bash
-[root@luckfox root]# ldd xiaozhi_linux_rs 
-        libasound.so.2 => /usr/lib/libasound.so.2 (0xa6d72000)
-        libgcc_s.so.1 => /lib/libgcc_s.so.1 (0xa6d43000)
-        libc.so.0 => /lib/libc.so.0 (0xa6cb4000)
-        ld-uClibc.so.1 => /lib/ld-uClibc.so.0 (0xa6efc000)
+```text
+target/armv7-unknown-linux-uclibceabihf/release/xiaozhi_linux_rs
 ```
 
----
-
-## 开源协议与分发说明
-
-本项目核心代码采用 MIT 协议开源。项目依赖的音频组件（ALSA 相关库）基于 LGPL 协议。
-
-鉴于开源协议限制，本项目分发的静态链接二进制文件仅建议用于测试与评估。若您计划对本项目进行二次开发或商业分发，请务必遵循 LGPL 协议规范（例如：采用动态链接方式，或开源您的衍生作品）。开发者需自行承担因违反开源协议而产生的法律风险，本项目不承担任何连带责任。
+也可以在 GitHub Actions 中手动运行 `Cross Compile` 工作流，选择单一目标或构建全部目标并创建 Release。
 
 ---
 
+## 🗺️ 功能边界与规划
 
-
-
-## 贡献
-
-如果你对嵌入式 Rust、Linux 网络编程感兴趣，欢迎提交 Issue 或 Pull Request！
-
-贡献注意事项，请参考[贡献指南](./docs/CONTRIBUTING.md)
+- **IoT 与智能家居联动**：协议能力已具备，更多设备侧集成仍在完善。
+- **本地离线唤醒与 AFE**：当前不计划内置。回声消除、波束成形和唤醒效果高度依赖麦克风阵列、声卡链路与硬件调校，更适合由 BSP、独立音频前端进程或专用模块提供。
+- **OTA**：Linux 中的客户端是独立进程，升级应由系统服务或部署脚本完成二进制原子替换和进程重启，详见 [OTA 功能说明](./docs/OTA功能说明.md)。
 
 ---
 
+## 🤝 贡献
 
+欢迎测试更多 Linux 设备、完善交叉编译脚本、贡献 MCP 示例，或提交 Issue 和 Pull Request。提交代码前请阅读 [贡献指南](./docs/CONTRIBUTING.md)。
 
-## 致谢
+QQ群：`695113129`
+
+---
+
+## 🙏 致谢
 
 - [78/xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)
 - [100askTeam/xiaozhi-linux](https://github.com/100askTeam/xiaozhi-linux)
 - [xinnan-tech/xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server)
+
+---
+
+## 📄 许可证
+
+本项目核心代码基于 [MIT License](./LICENSE) 发布。
+
+构建产物还包含或链接 ALSA、Opus、SpeexDSP 等第三方组件。当前构建脚本动态链接系统 `libasound`，并静态链接 Opus 与 SpeexDSP；进行二次开发或分发时，请同时遵守各第三方组件的许可证要求。
