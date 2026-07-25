@@ -1,6 +1,19 @@
 name: Cross Compile
 
 on:
+  push:
+    branches:
+      - feat/engineering-infrastructure
+    paths:
+      - '.cargo/**'
+      - '.github/workflows/cross-compile.yml'
+      - 'crates/**'
+      - 'src/**'
+      - 'build.rs'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'Cross.toml'
+      - 'rust-toolchain.toml'
   workflow_dispatch:
     inputs:
       target:
@@ -34,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJSON(inputs.target == 'all' && '["armv7-unknown-linux-uclibceabihf","armv7-unknown-linux-gnueabihf","aarch64-unknown-linux-gnu","x86_64-unknown-linux-gnu"]' || format('["{0}"]', inputs.target)) }}
+        target: ${{ fromJSON((github.event_name == 'push' || inputs.target == 'all') && '["armv7-unknown-linux-uclibceabihf","armv7-unknown-linux-gnueabihf","aarch64-unknown-linux-gnu","x86_64-unknown-linux-gnu"]' || format('["{0}"]', inputs.target)) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
