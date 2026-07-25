@@ -1,20 +1,11 @@
 //! Safe wrappers around SpeexDSP's preprocessor (denoise/AGC) and resampler.
 
 use std::ffi::{c_int, c_void};
-
-// ======================== FFI declarations ========================
-
-/// Opaque type for SpeexPreprocessState
-#[repr(C)]
-pub struct SpeexPreprocessState {
-    _private: [u8; 0],
-}
-
-/// Opaque type for SpeexResamplerState
-#[repr(C)]
-pub struct SpeexResamplerState {
-    _private: [u8; 0],
-}
+use xiaozhi_speexdsp_sys::{
+    SpeexPreprocessState, SpeexResamplerState, speex_preprocess_ctl, speex_preprocess_run,
+    speex_preprocess_state_destroy, speex_preprocess_state_init, speex_resampler_destroy,
+    speex_resampler_init, speex_resampler_process_int,
+};
 
 // Preprocessor request constants
 const SPEEX_PREPROCESS_SET_DENOISE: c_int = 0;
@@ -25,35 +16,6 @@ const SPEEX_PREPROCESS_SET_NOISE_SUPPRESS: c_int = 8;
 // Resampler constants
 const SPEEX_RESAMPLER_QUALITY_DEFAULT: c_int = 4;
 const RESAMPLER_ERR_SUCCESS: c_int = 0;
-
-unsafe extern "C" {
-    fn speex_preprocess_state_init(frame_size: c_int, sampling_rate: c_int)
-        -> *mut SpeexPreprocessState;
-    fn speex_preprocess_state_destroy(st: *mut SpeexPreprocessState);
-    fn speex_preprocess_run(st: *mut SpeexPreprocessState, x: *mut i16) -> c_int;
-    fn speex_preprocess_ctl(
-        st: *mut SpeexPreprocessState,
-        request: c_int,
-        ptr: *mut c_void,
-    ) -> c_int;
-
-    fn speex_resampler_init(
-        nb_channels: u32,
-        in_rate: u32,
-        out_rate: u32,
-        quality: c_int,
-        err: *mut c_int,
-    ) -> *mut SpeexResamplerState;
-    fn speex_resampler_destroy(st: *mut SpeexResamplerState);
-    fn speex_resampler_process_int(
-        st: *mut SpeexResamplerState,
-        channel_index: u32,
-        in_: *const i16,
-        in_len: *mut u32,
-        out: *mut i16,
-        out_len: *mut u32,
-    ) -> c_int;
-}
 
 // ======================== Preprocessor (denoise + AGC) ========================
 
@@ -68,9 +30,8 @@ unsafe impl Send for Preprocessor {}
 impl Preprocessor {
     /// Create a new preprocessor for a given frame size (in samples) and sample rate.
     pub fn new(frame_size: usize, sample_rate: u32) -> anyhow::Result<Self> {
-        let state = unsafe {
-            speex_preprocess_state_init(frame_size as c_int, sample_rate as c_int)
-        };
+        let state =
+            unsafe { speex_preprocess_state_init(frame_size as c_int, sample_rate as c_int) };
         if state.is_null() {
             anyhow::bail!("Failed to initialize speex preprocessor");
         }

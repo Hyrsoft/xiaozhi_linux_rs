@@ -1,7 +1,7 @@
 use serde::Deserialize;
+use std::env;
 use std::fs;
 use std::path::Path;
-use std::env;
 
 #[derive(Deserialize)]
 struct Config {
@@ -157,113 +157,15 @@ fn main() {
 
     // 交叉编译配置
     let target = env::var("TARGET").unwrap_or_default();
-    
+
     // 只在交叉编译到 uclibc 目标时链接 auxval_stub
     if target.contains("uclibc") {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let stub_c = format!("{}/scripts/armv7-unknown-linux-uclibceabihf/auxval_stub.c", manifest_dir);
-        
-        cc::Build::new()
-            .file(&stub_c)
-            .compile("auxval_stub");
+        let stub_c = format!(
+            "{}/scripts/armv7-unknown-linux-uclibceabihf/auxval_stub.c",
+            manifest_dir
+        );
+
+        cc::Build::new().file(&stub_c).compile("auxval_stub");
     }
-
-    // 处理 C 依赖构建 (opus, speexdsp)
-    // 交叉编译时从源码构建或通过 pkg-config 查找静态库
-    // 本地编译时通过 pkg-config 查找系统动态库
-    // 设置 XIAOZHI_FORCE_STATIC_LIBS=1 可强制本地编译也走静态路径（供 x86_64 编译脚本使用）
-    let host = env::var("HOST").unwrap_or_default();
-    let force_static = env::var("XIAOZHI_FORCE_STATIC_LIBS").is_ok();
-    if target != host || force_static {
-        build_or_probe_c_deps(&target);
-    } else {
-        pkg_config::Config::new()
-            .probe("speexdsp")
-            .expect("Failed to find speexdsp. Please install libspeexdsp-dev.");
-        pkg_config::Config::new()
-            .probe("opus")
-            .expect("Failed to find opus. Please install libopus-dev.");
-    }
-}
-
-fn build_or_probe_c_deps(target: &str) {
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let out_path = Path::new(&out_dir);
-
-    // 1. SpeexDSP
-    if pkg_config::Config::new().statik(true).probe("speexdsp").is_err() {
-        println!("cargo:warning=speexdsp not found via pkg-config for target {}. Building from source...", target);
-        let speexdsp_version = "1.2.1";
-        let speexdsp_url = format!("https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/speexdsp-{}.tar.gz", speexdsp_version);
-        let src_dir = download_and_extract(&speexdsp_url, "speexdsp", speexdsp_version, out_path);
-        
-        let mut config = autotools::Config::new(src_dir);
-        config.enable_static().disable_shared();
-            
-        if target.contains("arm-linux-gnueabihf") || target == "armv7-unknown-linux-gnueabihf" {
-            config.config_option("host", Some("arm-linux-gnueabihf"));
-        } else if target.contains("arm-rockchip830-linux-uclibcgnueabihf") || target == "armv7-unknown-linux-uclibceabihf" {
-            config.config_option("host", Some("arm-rockchip830-linux-uclibcgnueabihf"));
-        } else if target.contains("aarch64-linux-gnu") || target == "aarch64-unknown-linux-gnu" {
-            config.config_option("host", Some("aarch64-linux-gnu"));
-        }
-            
-        let dst = config.build();
-            
-        println!("cargo:rustc-link-search=native={}/lib", dst.display());
-        println!("cargo:rustc-link-lib=static=speexdsp");
-    }
-
-    // 2. Opus
-    if pkg_config::Config::new().statik(true).probe("opus").is_err() {
-        println!("cargo:warning=opus not found via pkg-config for target {}. Building from source...", target);
-        let opus_version = "1.5.2";
-        let opus_url = format!("https://github.com/haoyn231/xiaozhi_linux_rs/releases/download/Source_Mirror/opus-{}.tar.gz", opus_version);
-        let src_dir = download_and_extract(&opus_url, "opus", opus_version, out_path);
-        
-        let mut config = autotools::Config::new(src_dir);
-        config.enable_static()
-            .disable_shared()
-            .config_option("disable-doc", None)
-            .config_option("disable-extra-programs", None);
-            
-        if target.contains("arm-linux-gnueabihf") || target == "armv7-unknown-linux-gnueabihf" {
-            config.config_option("host", Some("arm-linux-gnueabihf"));
-        } else if target.contains("arm-rockchip830-linux-uclibcgnueabihf") || target == "armv7-unknown-linux-uclibceabihf" {
-            config.config_option("host", Some("arm-rockchip830-linux-uclibcgnueabihf"));
-        } else if target.contains("aarch64-linux-gnu") || target == "aarch64-unknown-linux-gnu" {
-            config.config_option("host", Some("aarch64-linux-gnu"));
-        }
-        
-        let dst = config.build();
-            
-        println!("cargo:rustc-link-search=native={}/lib", dst.display());
-        println!("cargo:rustc-link-lib=static=opus");
-    }
-}
-
-fn download_and_extract(url: &str, name: &str, version: &str, out_path: &Path) -> std::path::PathBuf {
-    let extract_dir = out_path.join(format!("{}-{}", name, version));
-    
-    // 如果目录已经存在并且不是空的，就假设已经解压好了
-    if extract_dir.exists() && extract_dir.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false) {
-        return extract_dir;
-    }
-
-    let tarball_path = out_path.join(format!("{}-{}.tar.gz", name, version));
-
-    if !tarball_path.exists() {
-        println!("cargo:warning=Downloading {} from {}", name, url);
-        let response = reqwest::blocking::get(url).unwrap_or_else(|e| panic!("Failed to download {}: {}", name, e));
-        let bytes = response.bytes().unwrap_or_else(|e| panic!("Failed to read bytes for {}: {}", name, e));
-        std::fs::write(&tarball_path, bytes).unwrap_or_else(|e| panic!("Failed to save tarball for {}: {}", name, e));
-    }
-
-    println!("cargo:warning=Extracting {}...", name);
-    let tar_gz = std::fs::File::open(&tarball_path).unwrap();
-    let tar = flate2::read::GzDecoder::new(tar_gz);
-    let mut archive = tar::Archive::new(tar);
-    archive.unpack(out_path).unwrap_or_else(|e| panic!("Failed to unpack archive for {}: {}", name, e));
-
-    extract_dir
 }

@@ -1,0 +1,11 @@
+[package]
+name = "xiaozhi-speexdsp-sys"
+version = "0.1.0"
+edition = "2024"
+links = "speexdsp"
+license = "MIT"
+description = "Minimal SpeexDSP FFI used by xiaozhi_linux_rs"
+
+[build-dependencies]
+pkg-config = "0.3"
+
