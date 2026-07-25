@@ -48,6 +48,11 @@ RUN set -eux; \
             test -x "${root}/bin/${CROSS_PREFIX}-${tool}"; \
             ln -s "${root}/bin/${CROSS_PREFIX}-${tool}" "/usr/local/bin/${CROSS_PREFIX}-${tool}"; \
         done; \
+    else \
+        for tool in gcc g++ ar ranlib strip; do \
+            test -x "/usr/bin/${tool}"; \
+            ln -s "/usr/bin/${tool}" "/usr/local/bin/${CROSS_PREFIX}-${tool}"; \
+        done; \
     fi
 
 RUN set -eux; \
@@ -99,4 +104,3 @@ ENV PKG_CONFIG_SYSROOT_DIR="/opt/xiaozhi-sdk/${TARGET}"
 ENV PKG_CONFIG_LIBDIR="/opt/xiaozhi-sdk/${TARGET}/usr/lib/pkgconfig:/opt/xiaozhi-sdk/${TARGET}/usr/share/pkgconfig"
 ENV LIBOPUS_STATIC=1
 ENV SPEEXDSP_STATIC=1
-

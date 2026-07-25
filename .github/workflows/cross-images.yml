@@ -1,0 +1,56 @@
+name: Cross SDK Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.cross/**'
+      - '.github/workflows/cross-images.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/haoyn231/xiaozhi-linux-rs-cross
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-gnu
+          - aarch64-gnu
+          - armv7-gnu
+          - armv7-uclibc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish SDK image
+        uses: docker/bake-action@v6
+        with:
+          files: .cross/docker-bake.hcl
+          targets: ${{ matrix.target }}
+          push: true
+          set: |
+            ${{ matrix.target }}.tags=${{ env.REGISTRY }}:${{ matrix.target }}-sdk-v1,${{ env.REGISTRY }}:${{ matrix.target }}-sdk-v1-${{ github.sha }}
+            ${{ matrix.target }}.cache-from=type=gha,scope=${{ matrix.target }}
+            ${{ matrix.target }}.cache-to=type=gha,mode=max,scope=${{ matrix.target }}
