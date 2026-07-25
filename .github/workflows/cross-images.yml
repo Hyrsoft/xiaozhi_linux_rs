@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feat/engineering-infrastructure
     paths:
       - '.cross/**'
       - '.github/workflows/cross-images.yml'
