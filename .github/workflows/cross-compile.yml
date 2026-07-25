@@ -16,8 +16,13 @@ on:
         default: all
       version:
         description: '版本标签 (例如: v1.0.0)'
+        required: false
+        default: build-validation
+      publish_release:
+        description: '全部构建成功后创建 GitHub Release'
         required: true
-        default: v1.0.0
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -95,6 +100,7 @@ jobs:
           if-no-files-found: error
 
   release:
+    if: ${{ inputs.publish_release }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
