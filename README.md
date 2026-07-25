@@ -47,6 +47,8 @@
 
 ## 🧩 系统架构
 
+各运行时模块、接口边界、扩展方法和使用示例见 [模块设计与使用指南](./docs/模块设计与使用指南.md)。构建镜像和依赖管理见 [工程基础设施说明](./docs/工程基础设施说明.md)。
+
 ```mermaid
 graph TD
     Config["配置<br/>config.toml / xiaozhi_config.json"]
