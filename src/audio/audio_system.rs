@@ -3,15 +3,18 @@
 //! Uses std::thread (NOT tokio tasks) for real-time audio I/O to avoid
 //! contention with async network tasks.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 
 use anyhow::Result;
 
-use super::record::record_thread;
+use super::alsa_device::AlsaBackend;
+use super::backend::{AudioBackend, AudioStreamParams};
+use super::frontend::{AudioFrontend, SpeexFrontend};
 use super::play::play_thread;
+use super::record::record_thread;
 
 /// Audio system configuration.
 #[derive(Debug, Clone)]
@@ -85,7 +88,31 @@ impl AudioSystem {
         opus_tx: mpsc::Sender<Vec<u8>>,
         opus_rx: mpsc::Receiver<Vec<u8>>,
     ) -> Result<Self> {
+        Self::start_with_backend(config, opus_tx, opus_rx, &AlsaBackend, |params| {
+            Ok(Box::new(SpeexFrontend::new(
+                params.period_size,
+                params.sample_rate,
+                params.channels,
+            )?))
+        })
+    }
+
+    pub fn start_with_backend<F>(
+        config: AudioConfig,
+        opus_tx: mpsc::Sender<Vec<u8>>,
+        opus_rx: mpsc::Receiver<Vec<u8>>,
+        backend: &dyn AudioBackend,
+        frontend_factory: F,
+    ) -> Result<Self>
+    where
+        F: FnOnce(AudioStreamParams) -> Result<Box<dyn AudioFrontend>>,
+    {
         let running = Arc::new(AtomicBool::new(true));
+        let capture = backend.open_capture(&config)?;
+        let capture_params = capture.params();
+        let playback = backend.open_playback(&config)?;
+        let frontend = frontend_factory(capture_params)?;
+        let (render_tx, render_rx) = mpsc::channel(8);
 
         log::info!(
             "AudioSystem starting — capture: \"{}\", playback: \"{}\", rate: {}Hz, ch: {}, opus: {}Hz/{}ch",
@@ -103,7 +130,9 @@ impl AudioSystem {
             thread::Builder::new()
                 .name("audio-record".into())
                 .spawn(move || {
-                    if let Err(e) = record_thread(&config, opus_tx, &running) {
+                    if let Err(e) =
+                        record_thread(&config, capture, frontend, render_rx, opus_tx, &running)
+                    {
                         log::error!("Recording thread error: {}", e);
                     }
                 })?
@@ -117,7 +146,7 @@ impl AudioSystem {
                 .spawn(move || {
                     // Small delay to let capture device initialize first
                     thread::sleep(std::time::Duration::from_secs(1));
-                    if let Err(e) = play_thread(&config, opus_rx, &running) {
+                    if let Err(e) = play_thread(&config, playback, opus_rx, render_tx, &running) {
                         log::error!("Playback thread error: {}", e);
                     }
                 })?

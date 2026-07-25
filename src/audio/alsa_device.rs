@@ -4,39 +4,78 @@ use alsa::pcm::{Access, Format, HwParams, PCM};
 use alsa::{Direction, ValueOr};
 use anyhow::{Context, Result};
 
-/// Parameters negotiated with the ALSA hardware.
-#[derive(Debug, Clone)]
-pub struct AlsaParams {
-    /// Actual sample rate after negotiation
-    pub sample_rate: u32,
-    /// Actual number of channels
-    pub channels: u32,
-    /// Period size in frames (one frame = channels × sample_width)
-    pub period_size: usize,
+use super::audio_system::AudioConfig;
+use super::backend::{AudioBackend, AudioStreamParams, CaptureStream, PlaybackStream};
+
+#[derive(Default)]
+pub struct AlsaBackend;
+
+struct AlsaCaptureStream {
+    pcm: PCM,
+    params: AudioStreamParams,
+}
+
+struct AlsaPlaybackStream {
+    pcm: PCM,
+    params: AudioStreamParams,
+}
+
+impl AudioBackend for AlsaBackend {
+    fn open_capture(&self, config: &AudioConfig) -> Result<Box<dyn CaptureStream>> {
+        let (pcm, params) = open_pcm(
+            &config.capture_device,
+            Direction::Capture,
+            config.sample_rate,
+            config.channels,
+            None,
+            "Capture",
+        )?;
+        Ok(Box::new(AlsaCaptureStream { pcm, params }))
+    }
+
+    fn open_playback(&self, config: &AudioConfig) -> Result<Box<dyn PlaybackStream>> {
+        let period_size = (config.playback_period_size > 0).then_some(config.playback_period_size);
+        let (pcm, params) = open_pcm(
+            &config.playback_device,
+            Direction::Playback,
+            config.playback_sample_rate,
+            config.playback_channels,
+            period_size,
+            "Playback",
+        )?;
+        Ok(Box::new(AlsaPlaybackStream { pcm, params }))
+    }
+}
+
+impl CaptureStream for AlsaCaptureStream {
+    fn params(&self) -> AudioStreamParams {
+        self.params
+    }
+
+    fn read(&mut self, samples: &mut [i16]) -> Result<usize> {
+        Ok(self.pcm.io_i16()?.readi(samples)?)
+    }
+
+    fn recover(&mut self) -> Result<()> {
+        Ok(self.pcm.prepare()?)
+    }
+}
+
+impl PlaybackStream for AlsaPlaybackStream {
+    fn params(&self) -> AudioStreamParams {
+        self.params
+    }
+
+    fn write(&mut self, samples: &[i16]) -> Result<usize> {
+        Ok(self.pcm.io_i16()?.writei(samples)?)
+    }
+
+    fn recover(&mut self) -> Result<()> {
+        Ok(self.pcm.prepare()?)
+    }
 }
 
 /// Open a PCM device for capture (recording).
-pub fn open_capture(device: &str, sample_rate: u32, channels: u32) -> Result<(PCM, AlsaParams)> {
-    open_pcm(device, Direction::Capture, sample_rate, channels, None, "Capture")
-}
-
-/// Open a PCM device for playback.
-pub fn open_playback(
-    device: &str,
-    sample_rate: u32,
-    channels: u32,
-    period_size: Option<usize>,
-) -> Result<(PCM, AlsaParams)> {
-    open_pcm(
-        device,
-        Direction::Playback,
-        sample_rate,
-        channels,
-        period_size,
-        "Playback",
-    )
-}
-
 fn open_pcm(
     device: &str,
     direction: Direction,
@@ -44,14 +83,13 @@ fn open_pcm(
     channels: u32,
     period_size: Option<usize>,
     dir_name: &str,
-) -> Result<(PCM, AlsaParams)> {
+) -> Result<(PCM, AudioStreamParams)> {
     let pcm = PCM::new(device, direction, false)
         .with_context(|| format!("Failed to open PCM device '{}' for {}", device, dir_name))?;
 
     // 1. 动态探测与配置硬件参数 (HwParams)
     let (actual_rate, actual_channels, actual_period_size, actual_buffer_size) = {
-        let hwp =
-            HwParams::any(&pcm).with_context(|| "Failed to initialize HwParams")?;
+        let hwp = HwParams::any(&pcm).with_context(|| "Failed to initialize HwParams")?;
 
         // 动态探测设备支持的边界能力（便于日志排查 USB 声卡的限制）
         log::info!(
@@ -109,7 +147,7 @@ fn open_pcm(
         }
     }
 
-    let params = AlsaParams {
+    let params = AudioStreamParams {
         sample_rate: actual_rate,
         channels: actual_channels,
         period_size: actual_period_size,

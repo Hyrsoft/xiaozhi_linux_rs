@@ -1,129 +1,128 @@
+use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
-use anyhow::Result;
 
-use super::alsa_device;
+use super::audio_system::AudioConfig;
+use super::backend::PlaybackStream;
+use super::frontend::RenderReference;
 use super::opus_codec::OpusDecoder;
 use super::stream_decoder::StreamDecoder;
-use super::audio_system::AudioConfig;
 
-/// Factory function: create a decoder based on the configured playback format.
 fn create_decoder(
     config: &AudioConfig,
-    alsa_rate: u32,
-    alsa_channels: u32,
+    output_rate: u32,
+    output_channels: u32,
 ) -> Result<Box<dyn StreamDecoder>> {
     match config.stream_format.as_str() {
-        "opus" => {
-            let decoder = OpusDecoder::new(
-                config.opus_sample_rate,
-                config.opus_channels,
-                config.decode_frame_duration_ms,
-                alsa_rate,
-                alsa_channels,
-            )?;
-            Ok(Box::new(decoder))
-        }
+        "opus" => Ok(Box::new(OpusDecoder::new(
+            config.opus_sample_rate,
+            config.opus_channels,
+            config.decode_frame_duration_ms,
+            output_rate,
+            output_channels,
+        )?)),
         other => anyhow::bail!("Unsupported stream format: {}", other),
     }
 }
 
-pub fn play_thread(
+pub(crate) fn play_thread(
     config: &AudioConfig,
-    mut opus_rx: mpsc::Receiver<Vec<u8>>,
+    mut playback: Box<dyn PlaybackStream>,
+    mut audio_rx: mpsc::Receiver<Vec<u8>>,
+    render_tx: mpsc::Sender<RenderReference>,
     running: &AtomicBool,
 ) -> Result<()> {
-    // 1. Open ALSA playback device with configurable sample rate, channels, and period size
-    let period_size_opt = if config.playback_period_size > 0 {
-        Some(config.playback_period_size)
-    } else {
-        None
-    };
-    let (pcm, params) = alsa_device::open_playback(
-        &config.playback_device,
-        config.playback_sample_rate,
-        config.playback_channels,
-        period_size_opt,
-    )?;
-
+    let params = playback.params();
     let actual_rate = params.sample_rate;
     let actual_channels = params.channels;
-    let _period_size = params.period_size;
-
-    // 2. Initialize decoder via factory pattern
     let mut decoder = create_decoder(config, actual_rate, actual_channels)?;
-
-    let io = pcm.io_i16()?;
 
     log::info!(
         "Playback started: stream_format={}, rate={}, ch={}, period={}",
         config.stream_format,
         actual_rate,
         actual_channels,
-        _period_size,
+        params.period_size,
     );
 
     while running.load(Ordering::Relaxed) {
-        // Block until we receive an audio packet (or channel closes)
-        match opus_rx.blocking_recv() {
-            Some(audio_data) => {
-                match decoder.decode(&audio_data) {
-                    Ok(pcm_data) => {
-                        if pcm_data.is_empty() {
-                            continue;
-                        }
-                        // Write decoded PCM to ALSA with retry loop to handle
-                        // short writes and XRUN recovery without losing frames.
-                        let total_frames = pcm_data.len() / actual_channels as usize;
-                        let mut frames_written = 0;
-                        let mut retry_count = 0u32;
+        let Some(audio_data) = audio_rx.blocking_recv() else {
+            log::info!("Playback channel closed");
+            break;
+        };
+        let pcm_data = match decoder.decode(&audio_data) {
+            Ok(data) if !data.is_empty() => data,
+            Ok(_) => continue,
+            Err(error) => {
+                log::error!("Audio decode error: {}", error);
+                continue;
+            }
+        };
 
-                        while frames_written < total_frames {
-                            let offset = frames_written * actual_channels as usize;
-                            match io.writei(&pcm_data[offset..]) {
-                                Ok(n) => {
-                                    frames_written += n;
-                                    retry_count = 0; // 成功写入，重置重试计数
-                                }
-                                Err(e) => {
-                                    log::warn!("ALSA XRUN or error: {}, recovering...", e);
-                                    retry_count += 1;
-
-                                    // 触发 ALSA 硬件恢复状态机
-                                    if let Err(e2) = pcm.prepare() {
-                                        log::error!(
-                                            "Failed to recover PCM playback: {}",
-                                            e2
-                                        );
-                                        break;
-                                    }
-
-                                    // 熔断器：底层持续跟不上写入速度时，丢弃剩余帧防止死循环
-                                    if retry_count >= 3 {
-                                        log::error!(
-                                            "Max recovery retries ({}) reached. Dropping {} unwritten frames to break dead-loop.",
-                                            retry_count,
-                                            total_frames - frames_written
-                                        );
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+        let total_frames = pcm_data.len() / actual_channels as usize;
+        let mut frames_written = 0;
+        let mut retry_count = 0_u32;
+        while frames_written < total_frames {
+            let offset = frames_written * actual_channels as usize;
+            match playback.write(&pcm_data[offset..]) {
+                Ok(frames) => {
+                    frames_written += frames;
+                    retry_count = 0;
+                }
+                Err(error) => {
+                    log::warn!("Audio playback error: {}, recovering...", error);
+                    retry_count += 1;
+                    if let Err(recovery_error) = playback.recover() {
+                        log::error!("Failed to recover audio playback: {}", recovery_error);
+                        break;
                     }
-                    Err(e) => {
-                        log::error!("Audio decode error: {}", e);
+                    if retry_count >= 3 {
+                        log::error!(
+                            "Max recovery retries reached. Dropping {} unwritten frames.",
+                            total_frames - frames_written
+                        );
+                        break;
                     }
                 }
             }
-            None => {
-                // Channel closed, exit playback
-                log::info!("Playback channel closed");
-                break;
-            }
+        }
+
+        if frames_written > 0 {
+            let sample_count = frames_written * actual_channels as usize;
+            let _ = render_tx.try_send(RenderReference {
+                samples: pcm_data[..sample_count].to_vec(),
+                sample_rate: actual_rate,
+                channels: actual_channels,
+            });
         }
     }
 
     log::info!("Playback stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_reference_channel_is_nonblocking_when_full() {
+        let (tx, _rx) = mpsc::channel(8);
+        for _ in 0..8 {
+            tx.try_send(RenderReference {
+                samples: vec![0; 4],
+                sample_rate: 48_000,
+                channels: 2,
+            })
+            .unwrap();
+        }
+        assert!(
+            tx.try_send(RenderReference {
+                samples: vec![0; 4],
+                sample_rate: 48_000,
+                channels: 2,
+            })
+            .is_err()
+        );
+    }
 }
