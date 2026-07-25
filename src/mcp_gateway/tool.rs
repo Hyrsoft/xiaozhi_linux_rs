@@ -1,11 +1,10 @@
 use async_trait::async_trait;
-use serde_json::{json, Value};
-use std::process::Stdio;
+use serde_json::{Value, json};
+use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
-use tokio::time::{timeout, Duration};
 
 use super::config::{ExecutionMode, ExternalToolConfig, NotifyMethod, ToolTransport};
+use super::process::{ProcessRequest, ProcessSupervisor};
 
 #[async_trait]
 pub trait McpTool: Send + Sync {
@@ -17,60 +16,89 @@ pub trait McpTool: Send + Sync {
 
 pub struct DynamicTool {
     config: ExternalToolConfig,
+    supervisor: ProcessSupervisor,
 }
 
 impl DynamicTool {
-    pub fn new(config: ExternalToolConfig) -> Self {
-        Self { config }
+    pub fn new(config: ExternalToolConfig, supervisor: ProcessSupervisor) -> Self {
+        Self { config, supervisor }
     }
 
     /// 根据传输协议类型分发执行（纯异步非阻塞）
-    async fn execute_inner(config: &ExternalToolConfig, params: Value) -> Result<Value, String> {
+    async fn execute_inner(
+        supervisor: &ProcessSupervisor,
+        config: &ExternalToolConfig,
+        params: Value,
+    ) -> Result<Value, String> {
         match &config.transport {
             ToolTransport::Subprocess { executable, args } => {
-                Self::exec_subprocess(executable, args, params).await
+                Self::exec_subprocess(
+                    supervisor,
+                    executable,
+                    args,
+                    params,
+                    Duration::from_millis(config.timeout_ms),
+                )
+                .await
             }
-            ToolTransport::Http { url, method } => {
-                Self::exec_http(url, method, params).await
-            }
-            ToolTransport::Tcp { address } => {
-                Self::exec_tcp(address, params).await
-            }
+            ToolTransport::Http { url, method } => tokio::time::timeout(
+                Duration::from_millis(config.timeout_ms),
+                Self::exec_http(url, method, params),
+            )
+            .await
+            .map_err(|_| {
+                format!(
+                    "Tool '{}' execution timed out after {} ms",
+                    config.name, config.timeout_ms
+                )
+            })?,
+            ToolTransport::Tcp { address } => tokio::time::timeout(
+                Duration::from_millis(config.timeout_ms),
+                Self::exec_tcp(address, params),
+            )
+            .await
+            .map_err(|_| {
+                format!(
+                    "Tool '{}' execution timed out after {} ms",
+                    config.name, config.timeout_ms
+                )
+            })?,
         }
     }
 
     /// 子进程执行（tokio::process，异步非阻塞）
     async fn exec_subprocess(
+        supervisor: &ProcessSupervisor,
         executable: &str,
         args: &[String],
         params: Value,
+        timeout: Duration,
     ) -> Result<Value, String> {
         let args_json = serde_json::to_string(&params).unwrap_or_default();
-        log::info!("Executing subprocess tool: {}, args: {}", executable, args_json);
+        log::info!(
+            "Executing subprocess tool: {}, args: {}",
+            executable,
+            args_json
+        );
 
-        let mut child = Command::new(executable)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to spawn {}: {}", executable, e))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(args_json.as_bytes()).await.unwrap_or_default();
-        }
-
-        let output = child
-            .wait_with_output()
-            .await
-            .map_err(|e| format!("Failed to wait for {}: {}", executable, e))?;
+        let output = supervisor
+            .run(ProcessRequest {
+                executable: executable.to_owned(),
+                args: args.to_vec(),
+                stdin: args_json.into_bytes(),
+                timeout,
+            })
+            .await?;
 
         if output.status.success() {
             let result_str = String::from_utf8_lossy(&output.stdout).to_string();
             Ok(json!(result_str))
         } else {
-            let err_str = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(format!("Subprocess error: {}", err_str))
+            let err_str = String::from_utf8_lossy(&output.stderr);
+            Err(format!(
+                "Subprocess exited with {}: {}",
+                output.status, err_str
+            ))
         }
     }
 
@@ -142,19 +170,13 @@ impl McpTool for DynamicTool {
         // ---- 后台模式（对话级异步） ----
         if self.config.mode == ExecutionMode::Background {
             let config_clone = self.config.clone();
-            let timeout_ms = self.config.timeout_ms;
+            let supervisor = self.supervisor.clone();
 
-            tokio::spawn(async move {
+            self.supervisor.spawn(async move {
                 log::info!(">>> 后台任务已启动: {}", config_clone.name);
-                let timeout_duration = Duration::from_millis(timeout_ms);
-
-                let _result = match timeout(
-                    timeout_duration,
-                    Self::execute_inner(&config_clone, params),
-                )
-                .await
-                {
-                    Ok(Ok(value)) => {
+                let result = Self::execute_inner(&supervisor, &config_clone, params).await;
+                let _result = match result {
+                    Ok(value) => {
                         let msg = value.as_str().unwrap_or(&value.to_string()).to_string();
                         let mcp_output = json!({
                             "content": [{
@@ -162,27 +184,42 @@ impl McpTool for DynamicTool {
                                 "text": msg
                             }]
                         });
-                        log::info!("✓ 后台任务 [{}] 执行完成 | MCP输出: {}", config_clone.name, mcp_output.to_string());
-                        log::info!("✓ 后台任务 [{}] 执行完成 | 脚本输出: {}", config_clone.name, msg);
+                        log::info!(
+                            "✓ 后台任务 [{}] 执行完成 | MCP输出: {}",
+                            config_clone.name,
+                            mcp_output
+                        );
+                        log::info!(
+                            "✓ 后台任务 [{}] 执行完成 | 脚本输出: {}",
+                            config_clone.name,
+                            msg
+                        );
                         Ok(msg)
                     }
-                    Ok(Err(err)) => {
-                        log::error!("✗ 后台任务 [{}] 执行失败 | 错误信息: {}", config_clone.name, err);
+                    Err(err) => {
+                        log::error!(
+                            "✗ 后台任务 [{}] 执行失败 | 错误信息: {}",
+                            config_clone.name,
+                            err
+                        );
                         Err(err)
-                    }
-                    Err(_) => {
-                        log::error!("⏱ 后台任务 [{}] 执行超时 ({}ms)", config_clone.name, timeout_ms);
-                        Err(format!("后台任务超时 ({}ms)", timeout_ms))
                     }
                 };
 
                 match &config_clone.notify {
                     NotifyMethod::Disabled => {
-                        log::info!("📝 后台任务 [{}] 完成结果已通过日志和标准错误输出记录", config_clone.name);
+                        log::info!(
+                            "📝 后台任务 [{}] 完成结果已通过日志和标准错误输出记录",
+                            config_clone.name
+                        );
                     }
                     #[allow(unreachable_patterns)]
                     other => {
-                        log::warn!("⚠️ 后台任务 [{}] 配置了未实现的通知方式: {:?}", config_clone.name, other);
+                        log::warn!(
+                            "⚠️ 后台任务 [{}] 配置了未实现的通知方式: {:?}",
+                            config_clone.name,
+                            other
+                        );
                     }
                 }
             });
@@ -194,16 +231,6 @@ impl McpTool for DynamicTool {
         }
 
         // ---- 标准同步模式（对话级同步） ----
-        let timeout_duration = Duration::from_millis(self.config.timeout_ms);
-        let config = &self.config;
-
-        match timeout(timeout_duration, Self::execute_inner(config, params)).await {
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(err)) => Err(err),
-            Err(_) => Err(format!(
-                "Tool '{}' execution timed out after {} ms",
-                self.config.name, self.config.timeout_ms
-            )),
-        }
+        Self::execute_inner(&self.supervisor, &self.config, params).await
     }
 }

@@ -14,13 +14,13 @@ use config::Config;
 use controller::CoreController;
 use gui_bridge::{GuiBridge, GuiEvent};
 
+use crate::mcp_gateway::init_mcp_gateway;
 use mac_address::get_mac_address;
 use net_link::{NetCommand, NetEvent, NetLink};
 use std::sync::Arc;
 use tokio::signal;
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use crate::mcp_gateway::init_mcp_gateway;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -71,7 +71,10 @@ async fn main() -> anyhow::Result<()> {
 
     // 初始化 MCP Gateway 工具箱
     let mcp_configs = if config.mcp.enabled {
-        log::info!("MCP Gateway is enabled. Loaded {} tools from configuration.", config.mcp.tools.len());
+        log::info!(
+            "MCP Gateway is enabled. Loaded {} tools from configuration.",
+            config.mcp.tools.len()
+        );
         config.mcp.tools.clone()
     } else {
         log::info!("MCP Gateway is disabled.");
@@ -140,7 +143,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // 启动网络链接，与小智服务器通信
-    let net_link = NetLink::new(config.clone(), tx_net_event, rx_net_cmd, mcp_server);
+    let net_link = NetLink::new(config.clone(), tx_net_event, rx_net_cmd, mcp_server.clone());
     tokio::spawn(async move {
         net_link.run().await;
     });
@@ -149,12 +152,7 @@ async fn main() -> anyhow::Result<()> {
     let audio_bridge = Arc::new(AudioBridge::start(&config, tx_audio_event)?);
 
     // 初始化控制器
-    let mut controller = CoreController::new(
-        config.clone(),
-        tx_net_cmd,
-        audio_bridge,
-        gui_bridge,
-    );
+    let mut controller = CoreController::new(config.clone(), tx_net_cmd, audio_bridge, gui_bridge);
 
     log::info!("Xiaozhi Core Started. Entering Event Loop...");
 
@@ -169,5 +167,6 @@ async fn main() -> anyhow::Result<()> {
             Some(event) = rx_gui_event.recv() => controller.handle_gui_event(event).await,
         }
     }
+    mcp_server.shutdown().await;
     Ok(())
 }
