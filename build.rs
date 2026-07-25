@@ -164,5 +164,9 @@ fn main() {
         let stub_c = format!("{}/native/auxval_stub.c", manifest_dir);
 
         cc::Build::new().file(&stub_c).compile("auxval_stub");
+        // uClibc toolchains may not provide getauxval. Keep the compatibility
+        // implementation even when today's dependency graph does not reference
+        // it directly, so future native dependencies can rely on the symbol.
+        println!("cargo:rustc-link-arg=-Wl,--undefined=getauxval");
     }
 }

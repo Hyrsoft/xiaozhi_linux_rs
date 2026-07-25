@@ -93,7 +93,7 @@ jobs:
           ! grep -q 'libspeexdsp.so' dynamic-section.txt
           if [ "${{ matrix.target }}" = 'armv7-unknown-linux-uclibceabihf' ]; then
             grep -q 'libc.so.0' dynamic-section.txt
-            readelf -Ws "${binary}" | grep -q 'getauxval'
+            grep -a -q 'xiaozhi_auxval_stub_v1' "${binary}"
           fi
 
       - name: Name artifact
