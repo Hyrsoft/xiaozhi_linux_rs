@@ -1,0 +1,38 @@
+[target.x86_64-unknown-linux-gnu]
+linker = "x86_64-linux-gnu-gcc"
+rustflags = [
+    "-C", "link-arg=-Wl,--no-as-needed",
+    "-C", "link-arg=-ldl",
+    "-C", "link-arg=-lpthread",
+    "-C", "link-arg=-lm",
+]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+rustflags = [
+    "-C", "link-arg=-Wl,--no-as-needed",
+    "-C", "link-arg=-ldl",
+    "-C", "link-arg=-lpthread",
+    "-C", "link-arg=-lm",
+]
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
+rustflags = [
+    "-C", "link-arg=-Wl,--no-as-needed",
+    "-C", "link-arg=-ldl",
+    "-C", "link-arg=-lpthread",
+    "-C", "link-arg=-lm",
+]
+
+[target.armv7-unknown-linux-uclibceabihf]
+linker = "arm-rockchip830-linux-uclibcgnueabihf-gcc"
+rustflags = [
+    "-C", "link-arg=-Wl,--no-as-needed",
+    "-C", "link-arg=-ldl",
+    "-C", "link-arg=-lpthread",
+    "-C", "link-arg=-lm",
+]
+
+[unstable]
+build-std = ["std", "panic_abort"]

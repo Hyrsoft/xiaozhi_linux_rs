@@ -1,0 +1,12 @@
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/haoyn231/xiaozhi-linux-rs-cross:x86_64-gnu-sdk-v1"
+
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/haoyn231/xiaozhi-linux-rs-cross:aarch64-gnu-sdk-v1"
+
+[target.armv7-unknown-linux-gnueabihf]
+image = "ghcr.io/haoyn231/xiaozhi-linux-rs-cross:armv7-gnu-sdk-v1"
+
+[target.armv7-unknown-linux-uclibceabihf]
+image = "ghcr.io/haoyn231/xiaozhi-linux-rs-cross:armv7-uclibc-sdk-v1"
+build-std = true

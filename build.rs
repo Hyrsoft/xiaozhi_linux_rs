@@ -161,10 +161,7 @@ fn main() {
     // 只在交叉编译到 uclibc 目标时链接 auxval_stub
     if target.contains("uclibc") {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let stub_c = format!(
-            "{}/scripts/armv7-unknown-linux-uclibceabihf/auxval_stub.c",
-            manifest_dir
-        );
+        let stub_c = format!("{}/native/auxval_stub.c", manifest_dir);
 
         cc::Build::new().file(&stub_c).compile("auxval_stub");
     }
