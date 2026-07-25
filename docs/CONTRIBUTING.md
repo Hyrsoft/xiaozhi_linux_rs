@@ -17,7 +17,7 @@ To ensure project stability and code quality, please read the following guidelin
 
 1. **编译测试 (Compilation Test)**:
    - 确保你的代码能在本地 Linux 环境正常编译通过 (`cargo build`)。
-   - 确保交叉编译通过。可使用 `scripts` 目录下的提供的脚本测试（如 `armv7-unknown-linux-uclibceabihf`）。
+   - 确保交叉编译通过。使用 `cross build --release --locked --target <target>` 测试相关目标，具体见[工程基础设施说明](./工程基础设施说明.md)。
 
 2. **功能测试 (Functional Test)**:
    - 请针对修改的功能进行实际测试（包括环境运行或实体开发板如 RV1106 上）。

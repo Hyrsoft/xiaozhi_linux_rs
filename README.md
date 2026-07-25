@@ -41,7 +41,7 @@
 - **设备管理**：自动完成设备激活与绑定，持久化 Client ID / Device ID，并管理空闲、聆听、处理、说话和网络错误状态。
 - **GUI 解耦**：通过 UDP IPC 同步激活码、运行状态、Toast 和 TTS 字幕，GUI 也可向核心进程发送控制指令。
 - **MCP 扩展**：通过配置动态接入 Subprocess、HTTP、TCP 工具，支持同步和后台执行模式，无需修改核心代码。
-- **多架构构建**：提供 x86_64、ARMv7 GNU、ARMv7 uClibc 和 AArch64 GNU 构建脚本及 GitHub Actions 工作流。
+- **多架构构建**：通过 cross-rs 与版本化 SDK 镜像构建 x86_64、ARMv7 GNU、ARMv7 uClibc 和 AArch64 GNU 目标。
 
 ---
 
@@ -110,11 +110,11 @@ chmod +x ./xiaozhi_linux_rs-x86_64-gnu
 ./xiaozhi_linux_rs-x86_64-gnu
 ```
 
-> Release 中的 GNU 二进制基于 GCC 8.3 工具链构建，需要 GLIBC 2.28 或更高版本。请通过 `ldd --version` 检查设备环境；更旧的系统可使用仓库内脚本自行构建。
+> Release 中的 GNU 二进制基于 GCC 8.3 工具链构建，需要 GLIBC 2.28 或更高版本。请通过 `ldd --version` 检查设备环境；更旧的系统需要基于对应 sysroot 构建新的版本化 cross SDK 镜像。
 
 ### 从源码编译
 
-需要 Rust 1.85+、C/C++ 构建工具和 ALSA、Opus、SpeexDSP 开发库。
+需要 Rust 1.90、C/C++ 构建工具和 ALSA、Opus、SpeexDSP 开发库。
 
 ```bash
 git clone https://github.com/haoyn231/xiaozhi_linux_rs.git
@@ -202,7 +202,7 @@ MCP Gateway 可从配置中动态加载外部工具，适合接入系统状态�
 
 ## 💻 平台支持
 
-状态说明：✅ 已提供构建脚本并完成设备验证　🧪 已提供构建脚本，仍欢迎更多设备测试
+状态说明：✅ 已提供 cross-rs 目标配置并完成设备验证　🧪 已提供构建配置，仍欢迎更多设备测试
 
 | Rust Target | C 运行库 | 已验证设备 | 状态 |
 | :--- | :--- | :--- | :---: |
@@ -218,21 +218,22 @@ MCP Gateway 可从配置中动态加载外部工具，适合接入系统状态�
 
 ## 🛠️ 交叉编译
 
-仓库中的脚本会下载所需工具链与依赖源码，并采用混合链接方式构建：运行时动态链接目标系统的 libc 和 `libasound`，Opus 与 SpeexDSP 静态链接进可执行文件。
+应用构建使用 [cross-rs](https://github.com/cross-rs/cross) 和 GHCR 中的版本化 SDK 镜像。工具链、sysroot、ALSA、Opus 与 SpeexDSP 只在 SDK 镜像发布时准备一次；普通 `cross build` 不下载或编译第三方 C 源码。运行时动态链接目标系统的 libc 和 `libasound`，Opus 与 SpeexDSP 以 PIC 静态库链接进可执行文件。
 
-| 目标 | 构建命令 | 详细说明 |
-| :--- | :--- | :--- |
-| ARMv7 uClibc | `bash scripts/armv7-unknown-linux-uclibceabihf/build.sh` | [README](./scripts/armv7-unknown-linux-uclibceabihf/README.md) |
-| ARMv7 GNU | `bash scripts/armv7-unknown-linux-gnueabihf/build.sh` | [README](./scripts/armv7-unknown-linux-gnueabihf/README.md) |
-| AArch64 GNU | `bash scripts/aarch64-unknown-linux-gnu/build.sh` | [README](./scripts/aarch64-unknown-linux-gnu/README.md) |
-| x86_64 GNU | `bash scripts/x86_64-unknown-linux-gnu/build.sh` | [README](./scripts/x86_64-unknown-linux-gnu/README.md) |
+| 目标 | SDK 镜像标签 |
+| :--- | :--- |
+| ARMv7 uClibc | `armv7-uclibc-sdk-v1` |
+| ARMv7 GNU | `armv7-gnu-sdk-v1` |
+| AArch64 GNU | `aarch64-gnu-sdk-v1` |
+| x86_64 GNU | `x86_64-gnu-sdk-v1` |
 
 以 Luckfox Pico / RV1106 为例：
 
 ```bash
-rustup toolchain install nightly
-rustup component add rust-src --toolchain nightly
-bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
+cargo install cross --version 0.2.5 --locked
+rustup toolchain install nightly-2025-09-14 --profile minimal --component rust-src
+RUSTUP_TOOLCHAIN=nightly-2025-09-14 \
+  cross build --release --locked --target armv7-unknown-linux-uclibceabihf
 ```
 
 输出文件位于：
@@ -241,21 +242,21 @@ bash scripts/armv7-unknown-linux-uclibceabihf/build.sh
 target/armv7-unknown-linux-uclibceabihf/release/xiaozhi_linux_rs
 ```
 
-也可以在 GitHub Actions 中手动运行 `Cross Compile` 工作流，选择单一目标或构建全部目标并创建 Release。
+GNU 目标使用仓库固定的 Rust 1.90.0，直接将 target 替换为对应三元组即可。也可以在 GitHub Actions 中手动运行 `Cross Compile` 工作流；只有所选目标全部成功时才会创建 Release。SDK 镜像的构建、版本策略和本地验证方式见 [工程基础设施说明](./docs/工程基础设施说明.md)。
 
 ---
 
 ## 🗺️ 功能边界与规划
 
 - **IoT 与智能家居联动**：协议能力已具备，更多设备侧集成仍在完善。
-- **本地离线唤醒与 AFE**：当前不计划内置。回声消除、波束成形和唤醒效果高度依赖麦克风阵列、声卡链路与硬件调校，更适合由 BSP、独立音频前端进程或专用模块提供。
+- **本地离线唤醒与高级 AFE**：当前已提供 Backend/Frontend 接口以及播放参考帧通道，但不内置回声消除、波束成形或唤醒算法；这些能力可由后续 Frontend、BSP 或专用模块实现。
 - **OTA**：Linux 中的客户端是独立进程，升级应由系统服务或部署脚本完成二进制原子替换和进程重启，详见 [OTA 功能说明](./docs/OTA功能说明.md)。
 
 ---
 
 ## 🤝 贡献
 
-欢迎测试更多 Linux 设备、完善交叉编译脚本、贡献 MCP 示例，或提交 Issue 和 Pull Request。提交代码前请阅读 [贡献指南](./docs/CONTRIBUTING.md)。
+欢迎测试更多 Linux 设备、完善 cross SDK、贡献 MCP 示例，或提交 Issue 和 Pull Request。提交代码前请阅读 [贡献指南](./docs/CONTRIBUTING.md)。
 
 QQ群：`695113129`
 
@@ -273,4 +274,4 @@ QQ群：`695113129`
 
 本项目核心代码基于 [MIT License](./LICENSE) 发布。
 
-构建产物还包含或链接 ALSA、Opus、SpeexDSP 等第三方组件。当前构建脚本动态链接系统 `libasound`，并静态链接 Opus 与 SpeexDSP；进行二次开发或分发时，请同时遵守各第三方组件的许可证要求。
+构建产物还包含或链接 ALSA、Opus、SpeexDSP 等第三方组件。cross SDK 动态链接系统 `libasound`，并静态链接 Opus 与 SpeexDSP；进行二次开发或分发时，请同时遵守各第三方组件的许可证要求。

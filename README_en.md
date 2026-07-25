@@ -125,7 +125,7 @@ graph TD
 
 ### Dependencies
 
-- **Rust Toolchain** (Stable 1.75+)
+- **Rust Toolchain** (1.90.0; pinned nightly for the uClibc target)
 
 - **Linux Development Environment**
 
@@ -143,10 +143,10 @@ graph TD
 
 > Running this project requires the target device to have audio input and output capabilities.
 
-- **armv7-unknow-linux-uclibceabihf**
+- **armv7-unknown-linux-uclibceabihf**
   - [Luckfox Pico series](https://wiki.luckfox.com/en/Luckfox-Pico-RV1106/) (Rockchip RV1106, Buildroot, I2S Sound Card)
   - [Echo-Mate Desktop Robot](https://github.com/No-Chicken/Echo-Mate) (Rockchip RV1106, Buildroot, I2S Sound Card)
-- **armv7-unknow-linux-gnueabihf**
+- **armv7-unknown-linux-gnueabihf**
   - [Luckfox Lyra series](https://wiki.luckfox.com/en/Luckfox-Lyra/Introduction) (Rockchip RK3506, Buildroot, USB Sound Card)
 - **aarch64-unknown-linux-gnu**
   - [Dshanpi-A1](https://wiki.dshanpi.org/docs/DshanPi-A1/intro/) (Rockchip RK3576, Armbian, Both I2S and USB Sound Card)
@@ -155,9 +155,9 @@ graph TD
 - **x86_64-unknown-linux-gnu**
   - Laptop with Arch Linux installed
 
-Other Linux devices on different target platforms (including x86 virtual machines) have not been verified yet, but are theoretically supported. For specific cross-compilation procedures, refer to [Rust Book](https://doc.rust-lang.org/beta/rustc/platform-support.html) and [RV1106 build script](./boards/rv1106_uclibceabihf/armv7_uclibc_build.sh).
+Other Linux devices on different target platforms (including x86 virtual machines) have not been verified yet, but are theoretically supported. Cross-compilation is defined by `Cross.toml` and the versioned SDK images documented in [Engineering Infrastructure](./docs/工程基础设施说明.md).
 
-**Testing and Pull Requests are welcome** (for build scripts in scripts, current sections of README, and sample code in the `examples` directory).
+**Testing and Pull Requests are welcome** (for cross SDK images, documentation, and sample code in the `examples` directory).
 
 ---
 
@@ -187,15 +187,11 @@ cargo run --release
 #### Example: Compiling for Luckfox Pico (RV1106)
 
 ```bash
-# No need to prepare the sdk environment, just use the cross-compilation script directly, it will automatically download the cross-compilation toolchain and dependency libraries, and compile and link them
-
-# Add support for the target
-rustup target add armv7-unknown-linux-uclibceabihf
-rustup toolchain install nightly
-rustup component add rust-src --toolchain nightly
-
-# Use the provided build script
-./scripts/armv7-unknown-linux-uclibceabihf/build.sh
+# Native toolchains and C libraries are already contained in the versioned SDK image.
+cargo install cross --version 0.2.5 --locked
+rustup toolchain install nightly-2025-09-14 --profile minimal --component rust-src
+RUSTUP_TOOLCHAIN=nightly-2025-09-14 \
+  cross build --release --locked --target armv7-unknown-linux-uclibceabihf
 
 # Build output: target/armv7-unknown-linux-uclibceabihf/release/xiaozhi_linux_rs
 ```
